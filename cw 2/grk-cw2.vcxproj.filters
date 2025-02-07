@@ -53,9 +53,6 @@
     <ClInclude Include="src\ex_2_2.hpp">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\FastNoiseLite.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\shader_2_1.vert">
