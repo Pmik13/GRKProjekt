@@ -8,13 +8,13 @@
 #include "Shader_Loader.h"
 #include "Render_Utils.h"
 #include "Camera.h"
+#include "FastNoiseLite.h"
 
 #include "Box.cpp"
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 #include <string>
-
 
 
 GLuint program;
@@ -35,7 +35,7 @@ glm::vec3 obstacleboxsize = glm::vec3(0.05f, 0.05f, 0.05f);
 glm::vec3 buildingboxsize = glm::vec3(0.5f, 0.5f, 0.5f);
 glm::vec3 boxsize = glm::vec3(0.05f, 0.05f, 0.05f);
 glm::vec3 cameraPos = glm::vec3(-4.f, 0.0f, 0.0f);
-glm::vec3 cameraDir =  glm::vec3(1.f, 0.f, 0.f);;
+glm::vec3 cameraDir = glm::vec3(1.f, 0.f, 0.f);;
 glm::vec3 spaceshipPos = glm::vec3(-4.f, 0, 0);
 glm::vec3 spaceshipDir = glm::vec3(1.f, 0.f, 0.f);
 
@@ -74,10 +74,121 @@ std::vector<Boid> boids;
 std::vector<Obstacle> obstacles;
 std::vector<Building> buildings;
 
+const int terrainWidth = 50;
+const int terrainHeight = 50;
+float terrain[terrainWidth][terrainHeight];
+std::vector<float> vertices;
+std::vector<unsigned int> indices;
+
+// Function to generate terrain based on Perlin noise
+void generateTerrain() {
+	FastNoiseLite noise;
+	noise.SetNoiseType(FastNoiseLite::NoiseType_Perlin);
+	noise.SetFrequency(1.f); // Adjust zoom
+
+	for (int x = 0; x < terrainWidth; x++) {
+		for (int y = 0; y < terrainHeight; y++) {
+			float value = noise.GetNoise((float)x * 0.1f, (float)y * 0.1f);
+			terrain[x][y] = value - 2.0f; // Scale height for visibility
+		}
+	}
+}
+
+void createTerrainMesh(std::vector<float>& vertices, std::vector<unsigned int>& indices) {
+	float halfWidth = terrainWidth / 2.0f;
+	float halfHeight = terrainHeight / 2.0f;
+
+	// Generate vertices
+	for (int x = 0; x < terrainWidth; x++) {
+		for (int y = 0; y < terrainHeight; y++) {
+			vertices.push_back(x - halfWidth);   // X coordinate
+			vertices.push_back(terrain[x][y] + 1.4f);  // Y (height)
+			vertices.push_back(y - halfHeight); // Z coordinate
+		}
+	}
+
+	// Generate indices for triangles
+	for (int x = 0; x < terrainWidth - 1; x++) {
+		for (int y = 0; y < terrainHeight - 1; y++) {
+			int topLeft = x * terrainHeight + y;
+			int topRight = (x + 1) * terrainHeight + y;
+			int bottomLeft = x * terrainHeight + (y + 1);
+			int bottomRight = (x + 1) * terrainHeight + (y + 1);
+
+			// First Triangle (Top Left, Bottom Left, Top Right)
+			indices.push_back(topLeft);
+			indices.push_back(bottomLeft);
+			indices.push_back(topRight);
+
+			// Second Triangle (Top Right, Bottom Left, Bottom Right)
+			indices.push_back(topRight);
+			indices.push_back(bottomLeft);
+			indices.push_back(bottomRight);
+		}
+	}
+}
+
+void setupBuildings() {
+	int buildingSpacing = 5;  // Space between buildings
+	int gridSize = 50;        // Grid size (same as terrain)
+
+	for (int x = 0; x < gridSize; x += buildingSpacing) {
+		for (int z = 0; z < gridSize; z += buildingSpacing) {
+			float terrainHeight = terrain[x][z];  // Get terrain height at (x, z)
+
+			// Ensure buildings are placed on relatively flat areas
+			if (fabs(terrainHeight - terrain[x + 1][z]) < 0.5f &&
+				fabs(terrainHeight - terrain[x][z + 1]) < 0.5f) {
+
+				float height = 5.0f + (rand() % 10);  // Random building height (5-15 units)
+
+				buildings.push_back({
+					glm::vec3(x - gridSize / 2, terrainHeight + height / 2.0f, z - gridSize / 2), // Centered position
+					glm::vec3(2.0f, height, 2.0f)  // Building scale (Width, Height, Depth)
+					});
+			}
+		}
+	}
+}
+
+
+// Function to render the terrain
+void renderTerrain(const std::vector<float>& vertices, const std::vector<unsigned int>& indices) {
+	// Create and bind VAO, VBO, and EBO
+	unsigned int VAO, VBO, EBO;
+	glGenVertexArrays(1, &VAO);
+	glGenBuffers(1, &VBO);
+	glGenBuffers(1, &EBO);
+
+	glBindVertexArray(VAO);
+
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+
+	// Define vertex attribute pointers
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glEnableVertexAttribArray(0);
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
+
+	// Use your shader program
+	// glUseProgram(shaderProgram);
+
+	// Bind the VAO and draw the terrain
+	glBindVertexArray(VAO);
+	glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+	glBindVertexArray(0);
+}
+
+
 void initializeBoids(int numBoids, glm::vec3 color) {
 	for (int i = 0; i < numBoids; i++) {
 		Boid boid;
-		boid.position = glm::vec3(rand() % 5/10.0f - 2.5f , rand() % 10 /10.0f, rand() % 10 / 10.0f);
+		boid.position = glm::vec3(rand() % 5 / 10.0f - 2.5f, rand() % 10 / 10.0f, rand() % 10 / 10.0f);
 		boid.velocity = glm::vec3((rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f);
 		boid.acceleration = glm::vec3(0.0f);
 		boid.color = color;
@@ -95,7 +206,7 @@ bool checkCollision(const glm::vec3& min1, const glm::vec3& max1, const glm::vec
 	return true;
 }
 
-void checkCollisionBoid(Boid &boid) {
+void checkCollisionBoid(Boid& boid) {
 	for (const auto& obstacle : obstacles) {
 
 		if (checkCollision(boid.minbox, boid.maxbox, obstacle.minbox, obstacle.maxbox)) {
@@ -103,7 +214,7 @@ void checkCollisionBoid(Boid &boid) {
 		}
 	}
 	for (const auto& building : buildings) {
-	
+
 		if (checkCollision(boid.minbox, boid.maxbox, building.minbox, building.maxbox)) {
 			boid.color = glm::vec3(1.0, 0.0, 0.0);
 		}
@@ -348,23 +459,23 @@ glm::vec3 limitSpeed(const glm::vec3& vector, float maxLength) {
 	return vector;
 }
 
-void updateboxBoid(Boid &boid, glm::vec3 boxsize) {
+void updateboxBoid(Boid& boid, glm::vec3 boxsize) {
 	boid.minbox = boid.position - boxsize;
 	boid.maxbox = boid.position + boxsize;
 }
 
 
 void updateBoids(float deltaTime, float neighborRadius, float avoidRadius) {
-	
+
 	for (auto& boid : boids) {
 		glm::vec3 forceCohesion = cohesion(boid, boids, neighborRadius);
-		glm::vec3 forceSeparation = separation(boid, boids,avoidRadius);
+		glm::vec3 forceSeparation = separation(boid, boids, avoidRadius);
 		glm::vec3 forceSeparationObstacles = separationObstacles(boid, obstacles, avoidRadius2);
 		glm::vec3 forceSeparationBuildings = separationBuildings(boid, buildings);
 		glm::vec3 forceAlignment = alignment(boid, boids, neighborRadius);
 		glm::vec3 forceattraction = attraction(boid);
 
-		boid.acceleration =  forceAlignment + forceCohesion  + forceSeparation + forceSeparationObstacles * 5 + forceSeparationBuildings * 10 + forceattraction ;
+		boid.acceleration = forceAlignment + forceCohesion + forceSeparation + forceSeparationObstacles * 5 + forceSeparationBuildings * 10 + forceattraction;
 		boid.velocity += boid.acceleration * deltaTime;
 		boid.velocity = limitSpeed(boid.velocity, maxSpeed);
 		boid.position += boid.velocity * deltaTime;
@@ -412,7 +523,7 @@ void drawObjectColor(Core::RenderContext& context, glm::mat4 modelMatrix, glm::v
 
 }
 
-void drawObjectBoid(Core::RenderContext& context, glm::mat4 modelMatrix,const Boid& boid) {
+void drawObjectBoid(Core::RenderContext& context, glm::mat4 modelMatrix, const Boid& boid) {
 	glm::vec3 color = boid.color;
 	glUseProgram(program);
 	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
@@ -439,7 +550,7 @@ void drawBoids() {
 		forward.x,forward.y,forward.z,0.,
 		0.,0.,0.,1.,
 			});
-		glm::mat4 translationMatrix= glm::translate(glm::mat4(1.0f), boid.position);
+		glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), boid.position);
 
 
 		glm::mat4 modelMatrix = translationMatrix * rotationMatrix;
@@ -462,8 +573,8 @@ void drawObstacles() {
 }
 
 void drawBuildings() {
-	
-	
+
+
 	for (const auto& building : buildings) {
 		// Najpierw translacja
 		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), building.position);
@@ -506,6 +617,8 @@ void drawSpaceship(const glm::mat4& cameraMatrix, glm::vec3 cameraDir, glm::vec3
 void makescene() {
 
 	drawBuildings();
+	renderTerrain(vertices, indices);
+
 }
 
 void renderScene(GLFWwindow* window)
@@ -524,8 +637,8 @@ void renderScene(GLFWwindow* window)
 	drawObstacles();
 
 	glm::mat4 cameraMatrix = createCameraMatrix();
-	drawSpaceship(cameraMatrix, cameraDir, cameraPos);
-	
+	//drawSpaceship(cameraMatrix, cameraDir, cameraPos);
+
 
 	glUseProgram(0);
 
@@ -545,7 +658,7 @@ struct Vertex {
 void loadModelToContext(std::string path, Core::RenderContext& context)
 {
 	Assimp::Importer import;
-	const aiScene * scene = import.ReadFile(path, aiProcess_Triangulate | aiProcess_CalcTangentSpace);
+	const aiScene* scene = import.ReadFile(path, aiProcess_Triangulate | aiProcess_CalcTangentSpace);
 
 	if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
 	{
@@ -558,7 +671,7 @@ void loadModelToContext(std::string path, Core::RenderContext& context)
 void addBuilding(glm::vec3 buildPos) {
 	Building building;
 	building.position = buildPos; // Pozycja przeszkody
-	building.size = glm::vec3(0.5f,1.0f,1.0f);          // Przykładowy rozmiar
+	building.size = glm::vec3(0.5f, 1.0f, 1.0f);          // Przykładowy rozmiar
 	building.minbox = building.position - buildingboxsize;
 	building.maxbox = building.position + buildingboxsize;
 	buildings.push_back(building);
@@ -610,7 +723,7 @@ void processInput(GLFWwindow* window)
 		cameraPos -= cameraDir * moveSpeed;
 	}
 	if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
-		cameraPos  += glm::vec3(0, 1, 0) * moveSpeed;
+		cameraPos += glm::vec3(0, 1, 0) * moveSpeed;
 	}
 	if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
 		cameraPos -= glm::vec3(0, 1, 0) * moveSpeed;
@@ -633,11 +746,15 @@ void processInput(GLFWwindow* window)
 	if (glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS) {
 		attract = (attract + 1) % 2;
 	}
-	
+
 }
 
 // funkcja jest glowna petla
 void renderLoop(GLFWwindow* window) {
+	generateTerrain();
+	setupBuildings();
+	createTerrainMesh(vertices, indices);
+
 	while (!glfwWindowShouldClose(window))
 	{
 		processInput(window);

@@ -16,6 +16,12 @@
     <Filter Include="Shader Files">
       <UniqueIdentifier>{0a247bb8-2e8e-4a90-b0ef-17415b0941ba}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\NewFilter1">
+      <UniqueIdentifier>{a3a53e72-d10d-4472-8b4a-ed993b1d5aec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\NewFilter2">
+      <UniqueIdentifier>{14410ada-c05d-44c2-b20c-dd5f33562f58}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="src\Shader_Loader.cpp">
@@ -52,6 +58,9 @@
     </ClInclude>
     <ClInclude Include="src\ex_2_2.hpp">
       <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\FastNoiseLite.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
