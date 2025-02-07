@@ -10,6 +10,9 @@
 
 #include "ex_2_2.hpp"
 
+
+
+
 int main(int argc, char** argv)
 {
 	// inicjalizacja glfw
