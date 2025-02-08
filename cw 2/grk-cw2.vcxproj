@@ -31,6 +31,8 @@
     <ClInclude Include="src\Texture.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\framebuffer.frag" />
+    <None Include="shaders\framebuffer.vert" />
     <None Include="shaders\shader.frag" />
     <None Include="shaders\shader.vert" />
     <None Include="shaders\shader_2_1.frag" />

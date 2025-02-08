@@ -22,13 +22,16 @@ GLuint program;
 GLuint programTex;
 Core::Shader_Loader shaderLoader;
 GLuint shadowShaderProgram;
+GLuint framebufferShader;
 GLuint VAO, VBO;
-GLuint depthMapFBO;
-GLuint depthMap;
-Core::RenderContext shipContext;
-Core::RenderContext buildingContext;
-Core::RenderContext coneContext;
-Core::RenderContext sphereContext;
+//Core::RenderContext shipContext;
+Core::RenderContext test;
+//Core::RenderContext buildingContext;
+//Core::RenderContext coneContext;
+//Core::RenderContext sphereContext;
+unsigned int depthMapFBO;
+unsigned int depthMap;
+unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
 float Rotation1 = 0.0f;
 float Rotation2 = 0.0f;
 float Rotation3 = 0.0f;
@@ -520,150 +523,228 @@ glm::mat4 createPerspectiveMatrix()
 	return perspectiveMatrix;
 }
 
-void drawObjectColor(Core::RenderContext& context, glm::mat4 modelMatrix, glm::vec3 color) {
+void drawObjectColor(Core::RenderContext& context, glm::mat4 modelMatrix, glm::vec3 color, GLuint Program) {
 
-	glUseProgram(program);
-	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
-	glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
-	glUniformMatrix4fv(glGetUniformLocation(program, "transformation"), 1, GL_FALSE, (float*)&transformation);
-	glUniformMatrix4fv(glGetUniformLocation(program, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
-	glUniform3f(glGetUniformLocation(program, "color"), color.x, color.y, color.z);
-	glUniform3f(glGetUniformLocation(program, "lightPos"), 0, 1, 0);
+	glUseProgram(Program);
+	//glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
+	//glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
+	//glUniformMatrix4fv(glGetUniformLocation(Program, "transformation"), 1, GL_FALSE, (float*)&transformation);
+	glUniformMatrix4fv(glGetUniformLocation(Program, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
+	//glUniform3f(glGetUniformLocation(Program, "color"), color.x, color.y, color.z);
+	//glUniform3f(glGetUniformLocation(Program, "lightPos"), 0, 1, 0);
 	Core::DrawContext(context);
-
-}
-void drawObjectTexture(Core::RenderContext& context, glm::mat4 modelMatrix, GLuint texture) {
-
-	glUseProgram(programTex);
-	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
-	glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
-	glUniformMatrix4fv(glGetUniformLocation(programTex, "transformation"), 1, GL_FALSE, (float*)&transformation);
-	glUniformMatrix4fv(glGetUniformLocation(programTex, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
-	glUniform3f(glGetUniformLocation(programTex, "lightPos"), 0, 0, 0);
-	Core::SetActiveTexture(texture, "colorTexture", programTex, 0);
-	Core::DrawContext(context);
-
 }
 
-void drawObjectBoid(Core::RenderContext& context, glm::mat4 modelMatrix, const Boid& boid) {
-	glm::vec3 color = boid.color;
-	glUseProgram(program);
-	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
-	glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
-	glUniformMatrix4fv(glGetUniformLocation(program, "transformation"), 1, GL_FALSE, (float*)&transformation);
-	glUniformMatrix4fv(glGetUniformLocation(program, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
-	glUniform3f(glGetUniformLocation(program, "color"), color.x, color.y, color.z);
-	glUniform3f(glGetUniformLocation(program, "lightPos"), 0, 1, 0);
+void drawObjectTexture(Core::RenderContext& context, glm::mat4 modelMatrix, GLuint texture, GLuint Program) {
+
+	glUseProgram(Program);
+	//glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
+	//glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
+	//glUniformMatrix4fv(glGetUniformLocation(Program, "transformation"), 1, GL_FALSE, (float*)&transformation);
+	glUniformMatrix4fv(glGetUniformLocation(Program, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
+	//glUniform3f(glGetUniformLocation(Program, "lightPos"), 0, 1, 0);
+	//Core::SetActiveTexture(texture, "colorTexture", Program, 0);
 	Core::DrawContext(context);
 
 }
 
-void drawBoids() {
-	for (const auto& boid : boids) {
-		glm::vec3 forward = glm::normalize(boid.velocity);
-		glm::vec3 Up = glm::vec3(0, 1, 0);
-		glm::vec3 right = glm::normalize(glm::cross(Up, forward));
+//void drawObjectBoid(Core::RenderContext& context, glm::mat4 modelMatrix, const Boid& boid) {
+//	glm::vec3 color = boid.color;
+//	glUseProgram(program);
+//	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
+//	glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
+//	glUniformMatrix4fv(glGetUniformLocation(program, "transformation"), 1, GL_FALSE, (float*)&transformation);
+//	glUniformMatrix4fv(glGetUniformLocation(program, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
+//	glUniform3f(glGetUniformLocation(program, "color"), color.x, color.y, color.z);
+//	glUniform3f(glGetUniformLocation(program, "lightPos"), 0, 1, 0);
+//	Core::DrawContext(context);
+//
+//}
 
-		glm::vec3 boidUp = glm::cross(forward, right);
+//void drawBoids() {
+//	for (const auto& boid : boids) {
+//		glm::vec3 forward = glm::normalize(boid.velocity);
+//		glm::vec3 Up = glm::vec3(0, 1, 0);
+//		glm::vec3 right = glm::normalize(glm::cross(Up, forward));
+//
+//		glm::vec3 boidUp = glm::cross(forward, right);
+//
+//		glm::mat4 rotationMatrix = glm::mat4({
+//		right.x,right.y,right.z,0.,
+//		boidUp.x,boidUp.y,boidUp.z,0.,
+//		forward.x,forward.y,forward.z,0.,
+//		0.,0.,0.,1.,
+//			});
+//		glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), boid.position);
+//
+//
+//		glm::mat4 modelMatrix = translationMatrix * rotationMatrix;
+//
+//		drawObjectBoid(coneContext, modelMatrix, boid);
+//	}
+//}
 
-		glm::mat4 rotationMatrix = glm::mat4({
-		right.x,right.y,right.z,0.,
-		boidUp.x,boidUp.y,boidUp.z,0.,
-		forward.x,forward.y,forward.z,0.,
-		0.,0.,0.,1.,
-			});
-		glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), boid.position);
+//void drawObstacles(GLuint Program) {
+//	for (const auto& obstacle : obstacles) {
+//		// Najpierw translacja
+//		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), obstacle.position);
+//
+//		// Następnie skalowanie
+//		modelMatrix = glm::scale(modelMatrix, glm::vec3(obstacle.size, obstacle.size, obstacle.size));
+//
+//		// Rysowanie obiektu
+//		drawObjectTexture(sphereContext, modelMatrix, texture::earth, Program);
+//	}
+//}
 
+//void drawBuildings(GLuint Program) {
+//
+//
+//	for (const auto& building : buildings) {
+//		// Najpierw translacja
+//		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), building.position);
+//
+//		// Następnie skalowanie
+//		modelMatrix = glm::scale(modelMatrix, glm::vec3(building.size.x, building.size.y, building.size.z));
+//
+//		// Rysowanie obiektu
+//		drawObjectTexture(buildingContext, modelMatrix, texture::earth, Program);
+//	}
+//}
 
-		glm::mat4 modelMatrix = translationMatrix * rotationMatrix;
-
-		drawObjectBoid(coneContext, modelMatrix, boid);
-	}
-}
-
-void drawObstacles() {
-	for (const auto& obstacle : obstacles) {
-		// Najpierw translacja
-		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), obstacle.position);
-
-		// Następnie skalowanie
-		modelMatrix = glm::scale(modelMatrix, glm::vec3(obstacle.size, obstacle.size, obstacle.size));
-
-		// Rysowanie obiektu
-		drawObjectTexture(sphereContext, modelMatrix, texture::earth);
-	}
-}
-
-void drawBuildings() {
-
-
-	for (const auto& building : buildings) {
-		// Najpierw translacja
-		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), building.position);
-
-		// Następnie skalowanie
-		modelMatrix = glm::scale(modelMatrix, glm::vec3(building.size.x, building.size.y, building.size.z));
-
-		// Rysowanie obiektu
-		drawObjectTexture(buildingContext, modelMatrix, texture::earth);
-	}
-}
-
-void drawSpaceship(const glm::mat4& cameraMatrix, glm::vec3 cameraDir, glm::vec3 cameraPos) {
-	// Wektory boczny i górny statku, bazujące na kamerze
-	glm::vec3 spaceshipSide = glm::normalize(glm::cross(cameraDir, glm::vec3(0.f, 1.f, 0.f)));
-	glm::vec3 spaceshipUp = glm::normalize(glm::cross(spaceshipSide, cameraDir));
-
-	// Macierz rotacji statku (zgodna z kamerą)
-	glm::mat4 spaceshipRotationMatrix = glm::mat4({
-		spaceshipSide.x, spaceshipSide.y, spaceshipSide.z, 0,
-		spaceshipUp.x, spaceshipUp.y, spaceshipUp.z, 0,
-		-cameraDir.x, -cameraDir.y, -cameraDir.z, 0,
-		0.f, 0.f, 0.f, 1.f,
-		});
-
-	// Dodaj obrót o 180 stopni wokół osi Y, aby obrócić statek
-	glm::mat4 rotation180 = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-
-	// Ustaw pozycję statku (przesunięcie od pozycji kamery, np. 1.5 jednostki w przód)
-	glm::vec3 spaceshipPosition = cameraPos + 1.5f * cameraDir;
-
-	// Macierz modelu statku
-	glm::mat4 spaceshipModelMatrix = glm::translate(spaceshipPosition) * spaceshipRotationMatrix * rotation180;
-
-	// Narysuj statek
-	drawObjectTexture(shipContext, spaceshipModelMatrix, texture::earth);
+void drawtest(GLuint Program) {
+	glm::mat4 modelMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(100.0f));
+	drawObjectTexture(test, modelMatrix, texture::earth, Program);
 }
 
 
-void makescene() {
+//void makescene(GLuint Program) {
+//
+//	drawBuildings(Program);
+//	renderTerrain(vertices, indices);
+//
+//}
 
-	drawBuildings();
-	renderTerrain(vertices, indices);
+void initShadowMapping()
+{
+	glGenFramebuffers(1, &depthMapFBO);
 
+	glGenTextures(1, &depthMap);
+	glBindTexture(GL_TEXTURE_2D, depthMap);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void renderDepthMap(GLFWwindow* window)
+{
+	glm::mat4 orthgonalProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 0.05f, 20.0f);
+	glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+	glm::mat4 lightProjection = orthgonalProjection * lightView;
+	glUseProgram(shadowShaderProgram);
+	glUniformMatrix4fv(glGetUniformLocation(shadowShaderProgram, "lightProjection"), 1, GL_FALSE, glm::value_ptr(lightProjection));
+	glUseProgram(0);
+
+	glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	drawtest(shadowShaderProgram);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	int width, height;
+	glfwGetFramebufferSize(window, &width, &height);
+	glViewport(0, 0, width, height);
+	glClearColor(0.0, 0.0, 0.0, 1.0);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+}
+
+GLuint rectVAO, rectVBO;
+
+void initFullscreenQuad()
+{
+	// Współrzędne wierzchołków pełnoekranowego kwadratu
+	GLfloat quadVertices[] = {
+		// Pozycja          // Współrzędne tekstury
+		-1.0f,  1.0f, 0.0f,  0.0f, 1.0f,  // Lewy górny
+		 1.0f,  1.0f, 0.0f,  1.0f, 1.0f,  // Prawy górny
+		 1.0f, -1.0f, 0.0f,  1.0f, 0.0f,  // Prawy dolny
+		 1.0f, -1.0f, 0.0f,  1.0f, 0.0f,  // Prawy dolny
+		-1.0f, -1.0f, 0.0f,  0.0f, 0.0f,  // Lewy dolny
+		-1.0f,  1.0f, 0.0f,  0.0f, 1.0f   // Lewy górny
+	};
+
+	// Tworzymy VAO i VBO
+	glGenVertexArrays(1, &rectVAO);
+	glGenBuffers(1, &rectVBO);
+
+	glBindVertexArray(rectVAO);
+
+	glBindBuffer(GL_ARRAY_BUFFER, rectVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+
+	// Pozycja wierzchołka
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(0);
+
+	// Współrzędne tekstury
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (GLvoid*)(3 * sizeof(GLfloat)));
+	glEnableVertexAttribArray(1);
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	glBindVertexArray(0);
+}
+
+
+void renderFullscreenQuad()
+{
+	glBindVertexArray(rectVAO);
+	glDisable(GL_DEPTH_TEST);  // Wyłączenie testu głębokości, aby zobaczyć mapę głębokości
+
+	glDrawArrays(GL_TRIANGLES, 0, 6);  // Rysowanie kwadratu pełnoekranowego (6 wierzchołków)
+
+	glEnable(GL_DEPTH_TEST);  // Włączenie testu głębokości po renderowaniu
+
+	glBindVertexArray(0);
 }
 
 void renderScene(GLFWwindow* window)
 {
-	glClearColor(0.0f, 0.3f, 0.3f, 1.0f);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);  // Red screen for testing
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	glUseProgram(program);
+	// Render depth map first
+	renderDepthMap(window);
+	glBindTexture(GL_TEXTURE_2D, depthMap);
+	std::vector<float> depthData(SHADOW_WIDTH * SHADOW_HEIGHT);
+	glGetTexImage(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, GL_FLOAT, depthData.data());
 
-	double currentTime = glfwGetTime();
-	double time = currentTime - lastTime;
-	updateBoids(time, neighborRadius, avoidRadius);
-	lastTime = currentTime;
-	drawBoids();
-	makescene();
-	drawObstacles();
+	// Sprawdź pierwszy piksel mapy głębokości
+	std::cout << "Depth sample (0,0): " << depthData[0] << std::endl;
 
-	glm::mat4 cameraMatrix = createCameraMatrix();
 
-	glUseProgram(0);
+	// Bind the depth map texture and render it to screen
+	glUseProgram(framebufferShader);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, depthMap);
+	glUniform1i(glGetUniformLocation(framebufferShader, "depthMap"), 0);
+
+	// Draw fullscreen quad to display depth map
+	renderFullscreenQuad();
+
+	glUseProgram(0);  // Unbind shader program
 
 	glfwSwapBuffers(window);
 }
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
 	glViewport(0, 0, width, height);
@@ -700,22 +781,27 @@ void init(GLFWwindow* window)
 {
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
-	glEnable(GL_DEPTH_TEST);
+	//glEnable(GL_DEPTH_TEST);
+	initShadowMapping();
 	program = shaderLoader.CreateProgram("shaders/shader.vert", "shaders/shader.frag");
 	programTex = shaderLoader.CreateProgram("shaders/shader_tex.vert", "shaders/shader_tex.frag");
 	shadowShaderProgram = shaderLoader.CreateProgram("shaders/shader_shadow.vert", "shaders/shader_shadow.frag");
-	loadModelToContext("./models/cone.obj", coneContext);
-	loadModelToContext("./models/sphere.obj", sphereContext);
-	loadModelToContext("./models/cuboid.obj", buildingContext);
-	loadModelToContext("./models/spaceship.obj", shipContext);
-	initializeBoids(50, glm::vec3(0.0, 1.0, 0.3));
+	framebufferShader = shaderLoader.CreateProgram("shaders/framebuffer.vert", "shaders/framebuffer.frag");
+	//loadModelToContext("./models/cone.obj", coneContext);
+	//loadModelToContext("./models/sphere.obj", sphereContext);
+	//loadModelToContext("./models/cuboid.obj", buildingContext);
+	//loadModelToContext("./models/spaceship.obj", shipContext);
+	loadModelToContext("./models/spaceship1.obj", test);
+	/*initializeBoids(50, glm::vec3(0.0, 1.0, 0.3));
 	initializeBoids(50, glm::vec3(0.0, 0.0, 1.0));
 	addBuilding(glm::vec3(-1.0f, 0.5f, 0.0f));
 	addBuilding(glm::vec3(-1.0f, 0.5f, 2.0f));
 	addBuilding(glm::vec3(1.0f, 0.5f, 1.0f));
-	addBuilding(glm::vec3(0.0f, 1.5f, 1.0f));
+	addBuilding(glm::vec3(0.0f, 1.5f, 1.0f));*/
 
 	texture::earth = Core::LoadTexture("./textures/earth.png");
+
+	initFullscreenQuad();
 }
 
 void shutdown(GLFWwindow* window)
