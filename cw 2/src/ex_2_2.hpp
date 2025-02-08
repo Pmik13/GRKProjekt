@@ -8,6 +8,7 @@
 #include "Shader_Loader.h"
 #include "Render_Utils.h"
 #include "Camera.h"
+#include "Texture.h"
 #include "FastNoiseLite.h"
 
 #include "Box.cpp"
@@ -22,8 +23,12 @@
 
 
 GLuint program;
+GLuint programTex;
 Core::Shader_Loader shaderLoader;
+GLuint shadowShaderProgram;
 GLuint VAO, VBO;
+GLuint depthMapFBO;
+GLuint depthMap;
 Core::RenderContext shipContext;
 Core::RenderContext buildingContext;
 Core::RenderContext coneContext;
@@ -43,8 +48,13 @@ glm::vec3 cameraDir = glm::vec3(1.f, 0.f, 0.f);;
 glm::vec3 spaceshipPos = glm::vec3(-4.f, 0, 0);
 glm::vec3 spaceshipDir = glm::vec3(1.f, 0.f, 0.f);
 
+bool shadowMappingEnabled = false;
+
 float aspectRatio = 1.f;
 
+namespace texture {
+	GLuint earth;
+}
 
 float neighborRadius = 1.0f;
 float sightAngle = 120.0f;
@@ -579,6 +589,18 @@ void drawObjectColor(Core::RenderContext& context, glm::mat4 modelMatrix, glm::v
 	Core::DrawContext(context);
 
 }
+void drawObjectTexture(Core::RenderContext& context, glm::mat4 modelMatrix, GLuint texture) {
+
+	glUseProgram(programTex);
+	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
+	glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
+	glUniformMatrix4fv(glGetUniformLocation(programTex, "transformation"), 1, GL_FALSE, (float*)&transformation);
+	glUniformMatrix4fv(glGetUniformLocation(programTex, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
+	glUniform3f(glGetUniformLocation(programTex, "lightPos"), 0, 0, 0);
+	Core::SetActiveTexture(texture, "colorTexture", programTex, 0);
+	Core::DrawContext(context);
+
+}
 
 void drawObjectBoid(Core::RenderContext& context, glm::mat4 modelMatrix, const Boid& boid) {
 	glm::vec3 color = boid.color;
@@ -625,7 +647,7 @@ void drawObstacles() {
 		modelMatrix = glm::scale(modelMatrix, glm::vec3(obstacle.size, obstacle.size, obstacle.size));
 
 		// Rysowanie obiektu
-		drawObjectColor(sphereContext, modelMatrix, glm::vec3(1.0, 0.0, 0.0));
+		drawObjectTexture(sphereContext, modelMatrix, texture::earth);
 	}
 }
 
@@ -640,7 +662,7 @@ void drawBuildings() {
 		modelMatrix = glm::scale(modelMatrix, glm::vec3(building.size.x, building.size.y, building.size.z));
 
 		// Rysowanie obiektu
-		drawObjectColor(buildingContext, modelMatrix, glm::vec3(1.0, 1.0, 0.0));
+		drawObjectTexture(buildingContext, modelMatrix, texture::earth);
 	}
 }
 
@@ -667,7 +689,7 @@ void drawSpaceship(const glm::mat4& cameraMatrix, glm::vec3 cameraDir, glm::vec3
 	glm::mat4 spaceshipModelMatrix = glm::translate(spaceshipPosition) * spaceshipRotationMatrix * rotation180;
 
 	// Narysuj statek
-	drawObjectColor(shipContext, spaceshipModelMatrix, glm::vec3(0.3, 0.3, 0.5));
+	drawObjectTexture(shipContext, spaceshipModelMatrix, texture::earth);
 }
 
 
@@ -694,8 +716,6 @@ void renderScene(GLFWwindow* window)
 	drawObstacles();
 
 	glm::mat4 cameraMatrix = createCameraMatrix();
-	//drawSpaceship(cameraMatrix, cameraDir, cameraPos);
-
 
 	glUseProgram(0);
 
@@ -738,7 +758,9 @@ void init(GLFWwindow* window)
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 	
 	glEnable(GL_DEPTH_TEST);
-	program = shaderLoader.CreateProgram("shaders/shader_2_2.vert", "shaders/shader_2_2.frag");
+	program = shaderLoader.CreateProgram("shaders/shader.vert", "shaders/shader.frag");
+	programTex = shaderLoader.CreateProgram("shaders/shader_tex.vert", "shaders/shader_tex.frag");
+	shadowShaderProgram = shaderLoader.CreateProgram("shaders/shader_shadow.vert", "shaders/shader_shadow.frag");
 	loadModelToContext("./models/cone.obj", coneContext);
 	loadModelToContext("./models/sphere.obj", sphereContext);
 	loadModelToContext("./models/cuboid.obj", buildingContext);
@@ -750,6 +772,7 @@ void init(GLFWwindow* window)
 	addBuilding(glm::vec3(1.0f, 0.5f, 1.0f));
 	addBuilding(glm::vec3(0.0f, 1.5f, 1.0f));
 
+	texture::earth = Core::LoadTexture("./textures/earth.png");
 }
 
 void shutdown(GLFWwindow* window)
@@ -803,10 +826,12 @@ void processInput(GLFWwindow* window)
 	if (glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS) {
 		attract = (attract + 1) % 2;
 	}
-
+	if (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS) {
+		shadowMappingEnabled = !shadowMappingEnabled;  // Zmiana stanu shadow mappingu
+		std::cout << "Shadow Mapping " << (shadowMappingEnabled ? "Enabled" : "Disabled") << std::endl;
+	}
 }
 
-// funkcja jest glowna petla
 void renderLoop(GLFWwindow* window) {
 	InitImGui(window);
 	
@@ -840,4 +865,3 @@ void renderLoop(GLFWwindow* window) {
 		glfwPollEvents();
 	}
 }
-//}

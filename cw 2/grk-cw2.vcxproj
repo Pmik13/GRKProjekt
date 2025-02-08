@@ -22,6 +22,8 @@
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\Render_Utils.cpp" />
     <ClCompile Include="src\Shader_Loader.cpp" />
+    <ClCompile Include="src\stb_image.cpp" />
+    <ClCompile Include="src\Texture.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\Camera.h" />
@@ -40,8 +42,12 @@
     <ClInclude Include="src\imstb_truetype.h" />
     <ClInclude Include="src\Render_Utils.h" />
     <ClInclude Include="src\Shader_Loader.h" />
+    <ClInclude Include="src\stb_image.h" />
+    <ClInclude Include="src\Texture.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="shaders\shader.frag" />
+    <None Include="shaders\shader.vert" />
     <None Include="shaders\shader_2_1.frag" />
     <None Include="shaders\shader_2_1.vert" />
     <None Include="shaders\shader_2_1b.frag" />
@@ -50,6 +56,10 @@
     <None Include="shaders\shader_2_2.vert" />
     <None Include="shaders\shader_2_3.frag" />
     <None Include="shaders\shader_2_3.vert" />
+    <None Include="shaders\shader_shadow.frag" />
+    <None Include="shaders\shader_shadow.vert" />
+    <None Include="shaders\shader_tex.frag" />
+    <None Include="shaders\shader_tex.vert" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{B4031E08-6274-4FFD-B41C-F8EA29E977FB}</ProjectGuid>
@@ -106,7 +116,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>opengl32.lib;freeglut.lib;glew32.lib;$(SolutionDir)\dependencies\glfw-3.3.8.bin.WIN32\lib-vc2019\glfw3.lib;$(SolutionDir)\dependencies\glfw-3.3.8.bin.WIN32\lib-vc2019\glfw3dll.lib;zlibd.lib;assimp-vc141-mtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>C:\progs\GrafikaProjekt\GRKProjekt\dependencies\glew-2.1.0\lib\Release\Win32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\Users\weron\source\glew-2.1.0\lib\Release\Win32;C:\progs\GrafikaProjekt\GRKProjekt\dependencies\glew-2.1.0\lib\Release\Win32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
