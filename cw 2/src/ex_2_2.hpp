@@ -107,6 +107,16 @@ float Boundryfloat = 2.0f;
 glm::vec3 minBoundary = glm::vec3(-Boundryfloat, -Boundryfloat, -Boundryfloat);
 glm::vec3 maxBoundary = glm::vec3(Boundryfloat, Boundryfloat, Boundryfloat);
 
+void addBuilding(glm::vec3 buildPos, glm::vec3 buildSize = glm::vec3(0.5f, 1.0f, 1.0f)) {
+	Building building;
+	building.position = buildPos; // Pozycja przeszkody
+	building.size = buildSize;          // Przykładowy rozmiar
+	building.minbox = building.position - buildingboxsize * buildSize;
+	building.maxbox = building.position + buildingboxsize * buildSize;
+	buildings.push_back(building);
+}
+
+
 void initializeBoids(float numBoids, glm::vec3 color) {
 	for (int i = 0; i < numBoids; i++) {
 		Boid boid;
@@ -248,10 +258,8 @@ void setupBuildings() {
 
 				float height = 5.0f + (rand() % 10);  // Random building height (5-15 units)
 
-				buildings.push_back({
-					glm::vec3(x - gridSize / 2, terrainHeight + height / 2.0f, z - gridSize / 2), // Centered position
-					glm::vec3(2.0f, height, 2.0f)  // Building scale (Width, Height, Depth)
-					});
+				addBuilding(glm::vec3(x - gridSize / 2, terrainHeight + height / 2.0f, z - gridSize / 2), glm::vec3(2.0f, height, 2.0f));
+
 			}
 		}
 	}
@@ -773,14 +781,6 @@ void loadModelToContext(std::string path, Core::RenderContext& context)
 	context.initFromAssimpMesh(scene->mMeshes[0]);
 }
 
-void addBuilding(glm::vec3 buildPos) {
-	Building building;
-	building.position = buildPos; // Pozycja przeszkody
-	building.size = glm::vec3(0.5f, 1.0f, 1.0f);          // Przykładowy rozmiar
-	building.minbox = building.position - buildingboxsize;
-	building.maxbox = building.position + buildingboxsize;
-	buildings.push_back(building);
-}
 void init(GLFWwindow* window)
 {
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
