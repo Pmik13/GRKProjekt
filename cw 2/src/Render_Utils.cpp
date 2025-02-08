@@ -78,6 +78,14 @@ void Core::RenderContext::initFromAssimpMesh(aiMesh* mesh) {
 
     glBufferSubData(GL_ARRAY_BUFFER, vertexDataBufferSize + vertexNormalBufferSize + vertexTexBufferSize + vertexTangentBufferSize, vertexBiTangentBufferSize, mesh->mBitangents);
 
+    // Przechowywanie wierzcho³ków i indeksów w strukturze
+    for (unsigned int i = 0; i < mesh->mNumVertices; i++) {
+        vertices.push_back(glm::vec3(mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z));
+    }
+
+    // Przechowywanie indeksów
+    this->indices = indices;
+
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)(0));
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, (void*)(vertexDataBufferSize));
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 0, (void*)(vertexNormalBufferSize + vertexDataBufferSize));
@@ -118,11 +126,11 @@ void Core::DrawContext(Core::RenderContext& context)
 {
 
 	glBindVertexArray(context.vertexArray);
-	glDrawElements(
-		GL_TRIANGLES,      // mode
+    glDrawElements(
+        GL_TRIANGLES,      // mode
 		context.size,    // count
-		GL_UNSIGNED_INT,   // type
-		(void*)0           // element array buffer offset
-	);
-	glBindVertexArray(0);
+        GL_UNSIGNED_INT,   // type
+        (void*)0           // element array buffer offset
+    );
+    glBindVertexArray(0);
 }
