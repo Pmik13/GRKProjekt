@@ -7,6 +7,7 @@
 
 #include "Shader_Loader.h"
 #include "Render_Utils.h"
+#include "stb_image.h"
 #include "Camera.h"
 #include "Texture.h"
 #include "FastNoiseLite.h"
@@ -30,6 +31,9 @@ GLuint shadowShaderProgram;
 GLuint VAO, VBO;
 GLuint depthMapFBO;
 GLuint depthMap;
+GLuint skyboxTexture;
+GLuint programSkybox;
+Core::RenderContext skyboxContext;
 Core::RenderContext shipContext;
 Core::RenderContext buildingContext;
 Core::RenderContext coneContext;
@@ -57,9 +61,66 @@ bool normalMappingEnabled = true;
 
 float aspectRatio = 1.f;
 
+GLuint LoadCubemap(std::vector<std::string> faces) {
+	GLuint textureID;
+	glGenTextures(1, &textureID);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+	int width, height, nrChannels;
+	for (GLuint i = 0; i < faces.size(); i++) {
+		unsigned char* data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+		if (data) {
+			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+			stbi_image_free(data);
+		}
+		else {
+			std::cerr << "Cubemap texture failed to load!" << std::endl;
+			stbi_image_free(data);
+			return 0;
+		}
+	}
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+	return textureID;
+}
+
+void drawSkybox(const glm::mat4& view, const glm::mat4& projection) {
+	glDepthMask(GL_FALSE); // Wyłącz zapis do bufora głębokości
+	glDisable(GL_DEPTH_TEST); // Wyłącz test głębokości
+
+	glUseProgram(programSkybox);
+
+	// Usuń translację z macierzy widoku
+	glm::mat4 viewWithoutTranslation = glm::mat4(glm::mat3(view));
+
+	// Przekaż macierz transformacji (połączona projekcja + widok)
+	glm::mat4 transformation = projection * viewWithoutTranslation;
+
+	// Przekaż macierz do shadera
+	glUniformMatrix4fv(glGetUniformLocation(programSkybox, "transformation"), 1, GL_FALSE, &transformation[0][0]);
+
+	// Aktywuj teksturę cubemapy
+	glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTexture);
+
+	// Narysuj skybox
+	Core::DrawContext(skyboxContext);
+
+	glDepthMask(GL_TRUE); // Włącz zapis do bufora głębokości
+	glEnable(GL_DEPTH_TEST); // Włącz test głębokości
+
+	glUseProgram(0); // Wyłącz program shaderów
+}
+
 namespace texture {
 	GLuint earth;
 	GLuint earthNormal;
+	GLuint steel;
+	GLuint steelNormal;
+	GLuint dove;
 }
 
 float amountOfBoids = 50.f;
@@ -680,7 +741,7 @@ void drawBoids() {
 
 		glm::mat4 modelMatrix = translationMatrix * rotationMatrix;
 
-		drawObjectBoid(coneContext, modelMatrix, boid);
+		drawObjectTexture(coneContext, modelMatrix, texture::dove);
 	}
 }
 
@@ -711,10 +772,10 @@ void drawBuildings() {
 		modelMatrix = glm::scale(modelMatrix, glm::vec3(building.size.x, building.size.y, building.size.z));
 
 		if (normalMappingEnabled) {
-			drawObjectNormal(buildingContext, modelMatrix, texture::earth, texture::earthNormal, programNormal);
+			drawObjectNormal(buildingContext, modelMatrix, texture::steel, texture::steelNormal, programNormal);
 		}
 		else {
-			drawObjectTexture(buildingContext, modelMatrix, texture::earth);
+			drawObjectTexture(buildingContext, modelMatrix, texture::steel);
 		}
 	}
 }
@@ -730,6 +791,10 @@ void renderScene(GLFWwindow* window)
 {
 	glClearColor(0.0f, 0.3f, 0.3f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glm::mat4 view = createCameraMatrix();
+	glm::mat4 projection = createPerspectiveMatrix();
+	drawSkybox(view, projection);
 
 	glUseProgram(program);
 
@@ -790,19 +855,38 @@ void init(GLFWwindow* window)
 	programTex = shaderLoader.CreateProgram("shaders/shader_tex.vert", "shaders/shader_tex.frag");
 	shadowShaderProgram = shaderLoader.CreateProgram("shaders/shader_shadow.vert", "shaders/shader_shadow.frag");
 	programNormal = shaderLoader.CreateProgram("shaders/shader_normal.vert", "shaders/shader_normal.frag");
-	loadModelToContext("./models/cone.obj", coneContext);
+	loadModelToContext("./models/dove.obj", coneContext);
 	loadModelToContext("./models/sphere.obj", sphereContext);
 	loadModelToContext("./models/cuboid.obj", buildingContext);
 	loadModelToContext("./models/spaceship.obj", shipContext);
 	initializeBoids(amountOfBoids, glm::vec3(0.0, 1.0, 0.3));
 	initializeBoids(amountOfBoids, glm::vec3(0.0, 0.0, 1.0));
-	addBuilding(glm::vec3(-1.0f, 0.5f, 0.0f));
+	/*addBuilding(glm::vec3(-1.0f, 0.5f, 0.0f));
 	addBuilding(glm::vec3(-1.0f, 0.5f, 2.0f));
 	addBuilding(glm::vec3(1.0f, 0.5f, 1.0f));
-	addBuilding(glm::vec3(0.0f, 1.5f, 1.0f));
+	addBuilding(glm::vec3(0.0f, 1.5f, 1.0f));*/
 
 	texture::earth = Core::LoadTexture("./textures/earth.png");
 	texture::earthNormal = Core::LoadTexture("./textures/earth_normalmap.png");
+
+	texture::steel = Core::LoadTexture("./textures/Steel_S.jpg");
+	texture::steelNormal = Core::LoadTexture("./textures/Steel_N.jpg");
+
+	texture::dove = Core::LoadTexture("./textures/DOVE.jpg");
+
+	loadModelToContext("./models/cube.obj", skyboxContext);
+
+	std::vector<std::string> skyboxFaces = {
+		"textures/skybox/right_c.jpg",
+		"textures/skybox/left.jpg",
+		"textures/skybox/top.jpg",
+		"textures/skybox/bottom.jpg",
+		"textures/skybox/back.jpg",
+		"textures/skybox/front.jpg"
+	};
+
+	skyboxTexture = LoadCubemap(skyboxFaces);
+	programSkybox = shaderLoader.CreateProgram("shaders/shader_skybox.vert", "shaders/shader_skybox.frag");
 }
 
 void shutdown(GLFWwindow* window)

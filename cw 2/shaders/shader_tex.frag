@@ -1,6 +1,6 @@
 #version 430 core
 
-float AMBIENT = 0.1;
+float AMBIENT = 0.4;
 
 uniform vec3 color;
 uniform vec3 lightPos;
