@@ -824,9 +824,12 @@ void init(GLFWwindow* window)
 	glEnable(GL_DEPTH_TEST);
 
 	// Preparations for the Shadow Map
-	glViewport(0, 0, shadowMapWidth, shadowMapHeight);
-	glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
-	glClear(GL_DEPTH_BUFFER_BIT);
+	if(shadowMappingEnabled)
+	{
+		glViewport(0, 0, shadowMapWidth, shadowMapHeight);
+		glBindFramebuffer(GL_FRAMEBUFFER, shadowMapFBO);
+		glClear(GL_DEPTH_BUFFER_BIT);
+	}
 
 	program = shaderLoader.CreateProgram("shaders/shader.vert", "shaders/shader.frag");
 	programTex = shaderLoader.CreateProgram("shaders/shader_tex.vert", "shaders/shader_tex.frag");
@@ -900,7 +903,7 @@ void processInput(GLFWwindow* window)
 	}
 	if (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS) {
 		shadowMappingEnabled = !shadowMappingEnabled;  // Zmiana stanu shadow mappingu
-		std::cout << "Shadow Mapping " << (shadowMappingEnabled ? "Enabled" : "Disabled") << std::endl;
+		std::cout << "Shadow Mapping Changed" << std::endl;
 	}
 }
 
