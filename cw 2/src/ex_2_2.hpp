@@ -39,7 +39,6 @@ float Rotation3 = 0.0f;
 float cameraAngle = 0;
 float maxSpeed = 1.0f;
 
-
 glm::vec3 obstacleboxsize = glm::vec3(0.05f, 0.05f, 0.05f);
 glm::vec3 buildingboxsize = glm::vec3(0.5f, 0.5f, 0.5f);
 glm::vec3 boxsize = glm::vec3(0.05f, 0.05f, 0.05f);
@@ -56,10 +55,11 @@ namespace texture {
 	GLuint earth;
 }
 
+float amountOfBoids = 50.f;
 float neighborRadius = 1.0f;
 float sightAngle = 120.0f;
-float avoidRadius = 0.4f;
-float avoidRadius2 = 1.0f;
+float avoidBoids = 0.4f;
+float avoidObstacles = 1.0f;
 double lastTime = 0.0;
 int attract = 0;
 struct Boid {
@@ -96,22 +96,49 @@ std::vector<unsigned int> indices;
 
 float frequencyValue = 0.9f;
 
+float Boundryfloat = 2.0f;
+glm::vec3 minBoundary = glm::vec3(-Boundryfloat, -Boundryfloat, -Boundryfloat);
+glm::vec3 maxBoundary = glm::vec3(Boundryfloat, Boundryfloat, Boundryfloat);
+
+void initializeBoids(float numBoids, glm::vec3 color) {
+	for (int i = 0; i < numBoids; i++) {
+		Boid boid;
+		boid.position = glm::vec3(rand() % 5 / 10.0f - 2.5f, rand() % 10 / 10.0f, rand() % 10 / 10.0f);
+		boid.velocity = glm::vec3((rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f);
+		boid.acceleration = glm::vec3(0.0f);
+		boid.color = color;
+		boids.push_back(boid);
+	}
+}
+
+void clearBoids() {
+	boids.clear(); // Remove all boids from the vector
+}
+
 void RenderUI() {
-	std::cout << "RenderUI() executed" << std::endl;
+	//std::cout << "RenderUI() executed" << std::endl;
 
 	// Set position and size of the window (optional)
 	ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
-	ImGui::SetNextWindowSize(ImVec2(300, 150), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(410, 150), ImGuiCond_Always);
 
 	// Begin the ImGui window
-	ImGui::Begin("Control Panel", NULL, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize);
-
-	// Render the slider
-	ImGui::Text("UI is rendering!");
+	ImGui::Begin("UI Control Panel", NULL, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize);
+	
 	 // Static to keep it persistent across frames
-	ImGui::SliderFloat("Adjust Value", &frequencyValue, 0.0f, 2.0f);
+	ImGui::SliderFloat("Boids:radius avoidBoid", &avoidBoids, 0.0f, 4.0f);
+	ImGui::SliderFloat("Boids:radius avoidObstacle ", &avoidObstacles, 0.0f, 4.0f);
+	ImGui::SliderFloat("Boids: Boundry ", &Boundryfloat, 0.0f, 10.0f);
+	bool sliderChanged = ImGui::SliderFloat("Boids: number", &amountOfBoids, 0, 100);
 
-	// End the ImGui window
+
+	// Check if the slider value has changed
+	if (sliderChanged) {
+		boids.clear();
+		initializeBoids(amountOfBoids/2, glm::vec3(0.0, 1.0, 0.3));
+		initializeBoids(amountOfBoids/2, glm::vec3(0.0, 0.0, 1.0));
+	}
+	// End the ImGui window5
 	ImGui::End();
 }
 
@@ -252,16 +279,6 @@ void renderTerrain(const std::vector<float>& vertices, const std::vector<unsigne
 }
 
 
-void initializeBoids(int numBoids, glm::vec3 color) {
-	for (int i = 0; i < numBoids; i++) {
-		Boid boid;
-		boid.position = glm::vec3(rand() % 5 / 10.0f - 2.5f, rand() % 10 / 10.0f, rand() % 10 / 10.0f);
-		boid.velocity = glm::vec3((rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f);
-		boid.acceleration = glm::vec3(0.0f);
-		boid.color = color;
-		boids.push_back(boid);
-	}
-}
 
 bool checkCollision(const glm::vec3& min1, const glm::vec3& max1, const glm::vec3& min2, const glm::vec3& max2) {
 	// Sprawdzamy, czy zakresy na każdej z osi się nie nakładają
@@ -385,16 +402,16 @@ glm::vec3 cohesion(Boid& boid, const std::vector<Boid>& boids, float neighborRad
 	return glm::vec3(0.0f);
 }
 
-glm::vec3 separation(Boid& boid, const std::vector<Boid>& boids, float avoidRadius) {
+glm::vec3 separation(Boid& boid, const std::vector<Boid>& boids, float avoidBoids) {
 	glm::vec3 avoid(0.0f);  // Siła unikania
 	int count = 0;
 
 	// Przeszukaj wszystkie boidy
 	for (const auto& other : boids) {
 		// Upewnijmy się, że boidy są w zasięgu widzenia i w obrębie unikania
-		if (insight(boid, other.position, avoidRadius) && boid.color == other.color) {
+		if (insight(boid, other.position, avoidBoids) && boid.color == other.color) {
 			float distance = glm::distance(boid.position, other.position);
-			if (distance < avoidRadius) {
+			if (distance < avoidBoids) {
 				glm::vec3 direction = boid.position - other.position;
 				avoid += glm::normalize(direction) / (distance);  // Normalizuj wektor, aby uwzględnić odległość
 				count++;
@@ -415,16 +432,16 @@ glm::vec3 separation(Boid& boid, const std::vector<Boid>& boids, float avoidRadi
 	return glm::vec3(0.0f);  // W przeciwnym razie, nie generuj żadnej siły
 }
 
-glm::vec3 separationObstacles(Boid& boid, const std::vector<Obstacle>& obstacles, float avoidRadius2) {
+glm::vec3 separationObstacles(Boid& boid, const std::vector<Obstacle>& obstacles, float avoidObstacles) {
 	glm::vec3 avoid(0.0f);  // Siła unikania
 	int count = 0;
 
 
 	for (const auto& other : obstacles) {
 		// Upewnijmy się, że boidy są w zasięgu widzenia i w obrębie unikania
-		if (insight(boid, other.position, avoidRadius2)) {
+		if (insight(boid, other.position, avoidObstacles)) {
 			float distance = glm::distance(boid.position, other.position);
-			if (distance < avoidRadius) {
+			if (distance < avoidBoids) {
 				glm::vec3 direction = boid.position - other.position;
 				avoid += glm::normalize(direction) / (distance);  // Normalizuj wektor, aby uwzględnić odległość
 				count++;
@@ -532,12 +549,12 @@ void updateboxBoid(Boid& boid, glm::vec3 boxsize) {
 }
 
 
-void updateBoids(float deltaTime, float neighborRadius, float avoidRadius) {
+void updateBoids(float deltaTime, float neighborRadius, float avoidBoids) {
 
 	for (auto& boid : boids) {
 		glm::vec3 forceCohesion = cohesion(boid, boids, neighborRadius);
-		glm::vec3 forceSeparation = separation(boid, boids, avoidRadius);
-		glm::vec3 forceSeparationObstacles = separationObstacles(boid, obstacles, avoidRadius2);
+		glm::vec3 forceSeparation = separation(boid, boids, avoidBoids);
+		glm::vec3 forceSeparationObstacles = separationObstacles(boid, obstacles, avoidObstacles);
 		glm::vec3 forceSeparationBuildings = separationBuildings(boid, buildings);
 		glm::vec3 forceAlignment = alignment(boid, boids, neighborRadius);
 		glm::vec3 forceattraction = attraction(boid);
@@ -547,8 +564,7 @@ void updateBoids(float deltaTime, float neighborRadius, float avoidRadius) {
 		boid.velocity = limitSpeed(boid.velocity, maxSpeed);
 		boid.position += boid.velocity * deltaTime;
 
-		glm::vec3 minBoundary(-2.f, 0.0f, -2.0f);
-		glm::vec3 maxBoundary(2.f, 2.0f, 2.0f);
+		
 		checkPosition(boid, minBoundary, maxBoundary);
 
 		updateboxBoid(boid, boxsize);
@@ -709,13 +725,23 @@ void renderScene(GLFWwindow* window)
 
 	double currentTime = glfwGetTime();
 	double time = currentTime - lastTime;
-	updateBoids(time, neighborRadius, avoidRadius);
+	updateBoids(time, neighborRadius, avoidBoids);
 	lastTime = currentTime;
 	drawBoids();
 	makescene();
 	drawObstacles();
 
 	glm::mat4 cameraMatrix = createCameraMatrix();
+
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+	// Render UI
+	RenderUI();
+
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 	glUseProgram(0);
 
@@ -765,8 +791,8 @@ void init(GLFWwindow* window)
 	loadModelToContext("./models/sphere.obj", sphereContext);
 	loadModelToContext("./models/cuboid.obj", buildingContext);
 	loadModelToContext("./models/spaceship.obj", shipContext);
-	initializeBoids(50, glm::vec3(0.0, 1.0, 0.3));
-	initializeBoids(50, glm::vec3(0.0, 0.0, 1.0));
+	initializeBoids(amountOfBoids, glm::vec3(0.0, 1.0, 0.3));
+	initializeBoids(amountOfBoids, glm::vec3(0.0, 0.0, 1.0));
 	addBuilding(glm::vec3(-1.0f, 0.5f, 0.0f));
 	addBuilding(glm::vec3(-1.0f, 0.5f, 2.0f));
 	addBuilding(glm::vec3(1.0f, 0.5f, 1.0f));
@@ -847,19 +873,7 @@ void renderLoop(GLFWwindow* window) {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		// Start ImGui frame
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
-
-		// Render UI
-		RenderUI();
-
-		// Debugging output
-		std::cout << "Calling ImGui::Render()" << std::endl;
-
-		// End ImGui frame and render
-		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		
 
 		renderScene(window);
 		glfwPollEvents();
