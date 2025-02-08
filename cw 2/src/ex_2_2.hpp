@@ -24,6 +24,7 @@
 
 GLuint program;
 GLuint programTex;
+GLuint programNormal;
 Core::Shader_Loader shaderLoader;
 GLuint shadowShaderProgram;
 GLuint VAO, VBO;
@@ -47,12 +48,18 @@ glm::vec3 cameraDir = glm::vec3(1.f, 0.f, 0.f);;
 glm::vec3 spaceshipPos = glm::vec3(-4.f, 0, 0);
 glm::vec3 spaceshipDir = glm::vec3(1.f, 0.f, 0.f);
 
+float near_plane = 0.05;
+float far_plane = 20.;
+glm::vec3 lightPos = glm::vec3(0.f, 1.f, 0.f);
+
 bool shadowMappingEnabled = false;
+bool normalMappingEnabled = true;
 
 float aspectRatio = 1.f;
 
 namespace texture {
 	GLuint earth;
+	GLuint earthNormal;
 }
 
 float amountOfBoids = 50.f;
@@ -120,7 +127,7 @@ void RenderUI() {
 
 	// Set position and size of the window (optional)
 	ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
-	ImGui::SetNextWindowSize(ImVec2(410, 150), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(410, 160), ImGuiCond_Always);
 
 	// Begin the ImGui window
 	ImGui::Begin("UI Control Panel", NULL, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize);
@@ -137,6 +144,11 @@ void RenderUI() {
 		boids.clear();
 		initializeBoids(amountOfBoids/2, glm::vec3(0.0, 1.0, 0.3));
 		initializeBoids(amountOfBoids/2, glm::vec3(0.0, 0.0, 1.0));
+	}
+
+	ImGui::Dummy(ImVec2(5, 5));
+	if (ImGui::Button(normalMappingEnabled ? "Disable Normal Mapping" : "Enable Normal Mapping")) {
+		normalMappingEnabled = !normalMappingEnabled;
 	}
 	// End the ImGui window5
 	ImGui::End();
@@ -574,19 +586,15 @@ void updateBoids(float deltaTime, float neighborRadius, float avoidBoids) {
 
 glm::mat4 createPerspectiveMatrix()
 {
-
 	glm::mat4 perspectiveMatrix;
-	float n = 0.05;
-	float f = 20.;
 	float a1 = glm::min(aspectRatio, 1.f);
 	float a2 = glm::min(1 / aspectRatio, 1.f);
 	perspectiveMatrix = glm::mat4({
 		1,0.,0.,0.,
 		0.,aspectRatio,0.,0.,
-		0.,0.,(f + n) / (n - f),2 * f * n / (n - f),
+		0.,0.,(far_plane + near_plane) / (near_plane - far_plane),2 * far_plane * near_plane / (near_plane - far_plane),
 		0.,0.,-1.,0.,
 		});
-
 
 	perspectiveMatrix = glm::transpose(perspectiveMatrix);
 
@@ -601,7 +609,7 @@ void drawObjectColor(Core::RenderContext& context, glm::mat4 modelMatrix, glm::v
 	glUniformMatrix4fv(glGetUniformLocation(program, "transformation"), 1, GL_FALSE, (float*)&transformation);
 	glUniformMatrix4fv(glGetUniformLocation(program, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
 	glUniform3f(glGetUniformLocation(program, "color"), color.x, color.y, color.z);
-	glUniform3f(glGetUniformLocation(program, "lightPos"), 0, 1, 0);
+	glUniform3f(glGetUniformLocation(program, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
 	Core::DrawContext(context);
 
 }
@@ -612,8 +620,22 @@ void drawObjectTexture(Core::RenderContext& context, glm::mat4 modelMatrix, GLui
 	glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
 	glUniformMatrix4fv(glGetUniformLocation(programTex, "transformation"), 1, GL_FALSE, (float*)&transformation);
 	glUniformMatrix4fv(glGetUniformLocation(programTex, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
-	glUniform3f(glGetUniformLocation(programTex, "lightPos"), 0, 0, 0);
+	glUniform3f(glGetUniformLocation(programTex, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
 	Core::SetActiveTexture(texture, "colorTexture", programTex, 0);
+	Core::DrawContext(context);
+
+}
+
+void drawObjectNormal(Core::RenderContext& context, glm::mat4 modelMatrix, GLuint textureID, GLuint normalmapId, GLuint Program) {
+	glUseProgram(Program);
+	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
+	glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
+	glUniformMatrix4fv(glGetUniformLocation(Program, "transformation"), 1, GL_FALSE, (float*)&transformation);
+	glUniformMatrix4fv(glGetUniformLocation(Program, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
+	glUniform3f(glGetUniformLocation(Program, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
+
+	Core::SetActiveTexture(textureID, "colorTexture", Program, 0);
+	Core::SetActiveTexture(normalmapId, "normalSampler", Program, 1);
 	Core::DrawContext(context);
 
 }
@@ -626,7 +648,7 @@ void drawObjectBoid(Core::RenderContext& context, glm::mat4 modelMatrix, const B
 	glUniformMatrix4fv(glGetUniformLocation(program, "transformation"), 1, GL_FALSE, (float*)&transformation);
 	glUniformMatrix4fv(glGetUniformLocation(program, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
 	glUniform3f(glGetUniformLocation(program, "color"), color.x, color.y, color.z);
-	glUniform3f(glGetUniformLocation(program, "lightPos"), 0, 1, 0);
+	glUniform3f(glGetUniformLocation(program, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
 	Core::DrawContext(context);
 
 }
@@ -663,13 +685,16 @@ void drawObstacles() {
 		modelMatrix = glm::scale(modelMatrix, glm::vec3(obstacle.size, obstacle.size, obstacle.size));
 
 		// Rysowanie obiektu
-		drawObjectTexture(sphereContext, modelMatrix, texture::earth);
+		if (normalMappingEnabled) {
+			drawObjectNormal(sphereContext, modelMatrix, texture::earth, texture::earthNormal, programNormal);
+		}
+		else {
+			drawObjectTexture(sphereContext, modelMatrix, texture::earth);
+		}
 	}
 }
 
 void drawBuildings() {
-
-
 	for (const auto& building : buildings) {
 		// Najpierw translacja
 		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), building.position);
@@ -677,37 +702,14 @@ void drawBuildings() {
 		// Następnie skalowanie
 		modelMatrix = glm::scale(modelMatrix, glm::vec3(building.size.x, building.size.y, building.size.z));
 
-		// Rysowanie obiektu
-		drawObjectTexture(buildingContext, modelMatrix, texture::earth);
+		if (normalMappingEnabled) {
+			drawObjectNormal(buildingContext, modelMatrix, texture::earth, texture::earthNormal, programNormal);
+		}
+		else {
+			drawObjectTexture(buildingContext, modelMatrix, texture::earth);
+		}
 	}
 }
-
-void drawSpaceship(const glm::mat4& cameraMatrix, glm::vec3 cameraDir, glm::vec3 cameraPos) {
-	// Wektory boczny i górny statku, bazujące na kamerze
-	glm::vec3 spaceshipSide = glm::normalize(glm::cross(cameraDir, glm::vec3(0.f, 1.f, 0.f)));
-	glm::vec3 spaceshipUp = glm::normalize(glm::cross(spaceshipSide, cameraDir));
-
-	// Macierz rotacji statku (zgodna z kamerą)
-	glm::mat4 spaceshipRotationMatrix = glm::mat4({
-		spaceshipSide.x, spaceshipSide.y, spaceshipSide.z, 0,
-		spaceshipUp.x, spaceshipUp.y, spaceshipUp.z, 0,
-		-cameraDir.x, -cameraDir.y, -cameraDir.z, 0,
-		0.f, 0.f, 0.f, 1.f,
-		});
-
-	// Dodaj obrót o 180 stopni wokół osi Y, aby obrócić statek
-	glm::mat4 rotation180 = glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-
-	// Ustaw pozycję statku (przesunięcie od pozycji kamery, np. 1.5 jednostki w przód)
-	glm::vec3 spaceshipPosition = cameraPos + 1.5f * cameraDir;
-
-	// Macierz modelu statku
-	glm::mat4 spaceshipModelMatrix = glm::translate(spaceshipPosition) * spaceshipRotationMatrix * rotation180;
-
-	// Narysuj statek
-	drawObjectTexture(shipContext, spaceshipModelMatrix, texture::earth);
-}
-
 
 void makescene() {
 
@@ -787,6 +789,7 @@ void init(GLFWwindow* window)
 	program = shaderLoader.CreateProgram("shaders/shader.vert", "shaders/shader.frag");
 	programTex = shaderLoader.CreateProgram("shaders/shader_tex.vert", "shaders/shader_tex.frag");
 	shadowShaderProgram = shaderLoader.CreateProgram("shaders/shader_shadow.vert", "shaders/shader_shadow.frag");
+	programNormal = shaderLoader.CreateProgram("shaders/shader_normal.vert", "shaders/shader_normal.frag");
 	loadModelToContext("./models/cone.obj", coneContext);
 	loadModelToContext("./models/sphere.obj", sphereContext);
 	loadModelToContext("./models/cuboid.obj", buildingContext);
@@ -799,6 +802,7 @@ void init(GLFWwindow* window)
 	addBuilding(glm::vec3(0.0f, 1.5f, 1.0f));
 
 	texture::earth = Core::LoadTexture("./textures/earth.png");
+	texture::earthNormal = Core::LoadTexture("./textures/earth_normalmap.png");
 }
 
 void shutdown(GLFWwindow* window)
@@ -860,7 +864,7 @@ void processInput(GLFWwindow* window)
 
 void renderLoop(GLFWwindow* window) {
 	InitImGui(window);
-	
+
 	generateTerrain();
 	setupBuildings();
 	createTerrainMesh(vertices, indices);
@@ -873,9 +877,14 @@ void renderLoop(GLFWwindow* window) {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		// Start ImGui frame
-		
+
+		GLuint cameraPosLocation = glGetUniformLocation(programNormal, "cameraPos");
+		glUseProgram(programNormal);
+		glUniform3fv(cameraPosLocation, 1, glm::value_ptr(cameraPos));
+		glUseProgram(0);
 
 		renderScene(window);
+
 		glfwPollEvents();
 	}
 }
