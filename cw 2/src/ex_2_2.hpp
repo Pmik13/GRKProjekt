@@ -16,6 +16,10 @@
 #include <assimp/postprocess.h>
 #include <string>
 
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+
 
 GLuint program;
 Core::Shader_Loader shaderLoader;
@@ -80,11 +84,64 @@ float terrain[terrainWidth][terrainHeight];
 std::vector<float> vertices;
 std::vector<unsigned int> indices;
 
+float frequencyValue = 0.9f;
+
+void RenderUI() {
+	std::cout << "RenderUI() executed" << std::endl;
+
+	// Set position and size of the window (optional)
+	ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(300, 150), ImGuiCond_Always);
+
+	// Begin the ImGui window
+	ImGui::Begin("Control Panel", NULL, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize);
+
+	// Render the slider
+	ImGui::Text("UI is rendering!");
+	 // Static to keep it persistent across frames
+	ImGui::SliderFloat("Adjust Value", &frequencyValue, 0.0f, 2.0f);
+
+	// End the ImGui window
+	ImGui::End();
+}
+
+
+
+void InitImGui(GLFWwindow* window) {
+	std::cout << "Initializing ImGui..." << std::endl;
+
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO();
+
+	// Set the initial display size
+	int width, height;
+	glfwGetFramebufferSize(window, &width, &height);
+	io.DisplaySize = ImVec2((float)width, (float)height);
+
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	std::cout << "Window size: " << io.DisplaySize.x << ", " << io.DisplaySize.y << std::endl;
+
+	if (!ImGui_ImplGlfw_InitForOpenGL(window, true)) {
+		std::cerr << "Failed to initialize ImGui GLFW backend!" << std::endl;
+		return;
+	}
+
+	if (!ImGui_ImplOpenGL3_Init("#version 330")) {
+		std::cerr << "Failed to initialize ImGui OpenGL backend!" << std::endl;
+		return;
+	}
+
+	std::cout << "ImGui initialized successfully!" << std::endl;
+}
+
+
+
 // Function to generate terrain based on Perlin noise
 void generateTerrain() {
 	FastNoiseLite noise;
 	noise.SetNoiseType(FastNoiseLite::NoiseType_Perlin);
-	noise.SetFrequency(1.f); // Adjust zoom
+	noise.SetFrequency(frequencyValue); // Adjust zoom
 
 	for (int x = 0; x < terrainWidth; x++) {
 		for (int y = 0; y < terrainHeight; y++) {
@@ -679,7 +736,7 @@ void addBuilding(glm::vec3 buildPos) {
 void init(GLFWwindow* window)
 {
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-
+	
 	glEnable(GL_DEPTH_TEST);
 	program = shaderLoader.CreateProgram("shaders/shader_2_2.vert", "shaders/shader_2_2.frag");
 	loadModelToContext("./models/cone.obj", coneContext);
@@ -751,6 +808,8 @@ void processInput(GLFWwindow* window)
 
 // funkcja jest glowna petla
 void renderLoop(GLFWwindow* window) {
+	InitImGui(window);
+	
 	generateTerrain();
 	setupBuildings();
 	createTerrainMesh(vertices, indices);
@@ -758,6 +817,24 @@ void renderLoop(GLFWwindow* window) {
 	while (!glfwWindowShouldClose(window))
 	{
 		processInput(window);
+
+		// Clear OpenGL buffers
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		// Start ImGui frame
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
+		// Render UI
+		RenderUI();
+
+		// Debugging output
+		std::cout << "Calling ImGui::Render()" << std::endl;
+
+		// End ImGui frame and render
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
 		renderScene(window);
 		glfwPollEvents();
