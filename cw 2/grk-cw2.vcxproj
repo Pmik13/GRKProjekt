@@ -60,6 +60,8 @@
     <None Include="shaders\shader_normal.vert" />
     <None Include="shaders\shader_shadow.frag" />
     <None Include="shaders\shader_shadow.vert" />
+    <None Include="shaders\shader_skybox.frag" />
+    <None Include="shaders\shader_skybox.vert" />
     <None Include="shaders\shader_tex.frag" />
     <None Include="shaders\shader_tex.vert" />
   </ItemGroup>
