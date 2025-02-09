@@ -21,6 +21,7 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include <unordered_map>
 
 GLuint program;
 GLuint programTex;
@@ -237,11 +238,7 @@ void initializeBoids(float numBoids, glm::vec3 color) {
 		boid.acceleration = glm::vec3(0.0f);
 		boid.color = color;
 		boid.indices = coneContext.getIndices();
-
 		boid.vertices = coneContext.getVertices();
-		for (auto& vertex : boid.vertices) {
-			vertex += boid.position;
-		}
 
 		boid.setKDOP();
 		boids.push_back(boid);
@@ -445,18 +442,20 @@ bool checkKDOPCollision(const std::vector<glm::vec3>& DOP1, const std::vector<gl
 	return true;
 }
 
-void updateKDOP(Boid& obj) {
-	for (auto& vertex : obj.vertices) {
-		vertex = vertex - obj.position + obj.position;
+void updateKDOPBoid(Boid& boid) {
+	glm::vec3 delta = boid.velocity;
+
+	for (int i = 0; i < 12; i++) {
+		float deltaProj = glm::dot(delta, glm::normalize(boid.DOP[i]));
+		boid.DOP[i] += glm::normalize(boid.DOP[i]) * deltaProj;
 	}
-	obj.setKDOP();
 }
 
-void updateKDOP(Obstacle& obj) {
-	for (auto& vertex : obj.vertices) {
-		vertex = vertex - obj.position + obj.position;
+void updateKDOPObstacle(Obstacle obstacle) {
+	for (auto& vertex : obstacle.vertices) {
+		vertex = vertex - obstacle.position + obstacle.position;
 	}
-	obj.setKDOP();
+	obstacle.setKDOP();
 }
 
 glm::mat4 createCameraMatrix()
@@ -614,38 +613,25 @@ glm::vec3 separationObstacles(Boid& boid, const std::vector<Obstacle>& obstacles
 }
 
 glm::vec3 separationBuildings(Boid& boid, const std::vector<Building>& buildings) {
-	glm::vec3 avoid(0.0f);  // Siła unikania
+	glm::vec3 avoid(0.0f);
 	int count = 0;
 
 	for (const auto& building : buildings) {
-		// Obliczenie minbox i maxbox na podstawie pozycji i rozmiaru budynku
-		glm::vec3 minbox = building.position - building.size / 2.0f;
-		glm::vec3 maxbox = building.position + building.size / 2.0f;
-
-		// Wstępne sprawdzenie, czy boid jest w pobliżu tej przeszkody
-		float distanceToBuilding = glm::length(boid.position - (building.position + building.size / 2.0f));
-
-		// Jeśli kolizja zachodzi, oblicz wektor unikania
 		if (checkKDOPCollision(boid.DOP, building.DOP)) {
-			// Oblicz punkt najbliższy boidowi w obrębie budynku
-			glm::vec3 closestPoint = glm::clamp(boid.position, minbox, maxbox);
+			glm::vec3 closestPoint = glm::clamp(boid.position,
+				building.position - building.size / 2.0f,
+				building.position + building.size / 2.0f);
 			glm::vec3 direction = boid.position - closestPoint;
 			float distance = glm::length(direction);
 
-			// Tylko dodajemy wektor unikania, jeśli boid jest dostatecznie blisko
 			if (distance > 0.0f) {
-				// Można dodać dodatkowe warunki, aby zmniejszyć wpływ dalekich przeszkód
-				avoid += direction / (distance * distance);  // Przykład zastosowania odwrotności kwadratu odległości
+				avoid += glm::normalize(direction) / (distance + 0.1f);  // Dodatkowy współczynnik unikania
 				count++;
 			}
 		}
 	}
 
-	if (count > 0) {
-		avoid /= count;  // Średnia siła unikania
-	}
-
-	return glm::length(avoid) > 0.0f ? glm::normalize(avoid) : glm::vec3(0.0f);
+	return (count > 0) ? glm::normalize(avoid) * 0.5f : glm::vec3(0.0f); // Zmniejszony wpływ unikania
 }
 
 
@@ -694,25 +680,64 @@ glm::vec3 limitSpeed(const glm::vec3& vector, float maxLength) {
 	return vector;
 }
 
+std::unordered_map<int, std::vector<Boid*>> spatialGrid;
+float gridSize = 1.0f; // Rozmiar komórki siatki
+
+int getGridKey(glm::vec3 position) {
+	return (int)(position.x / gridSize) * 73856093
+		^ (int)(position.y / gridSize) * 19349663
+		^ (int)(position.z / gridSize) * 83492791;
+}
+
 void updateBoids(float deltaTime, float neighborRadius, float avoidBoids) {
+	spatialGrid.clear(); // Reset siatki przestrzennej
 
 	for (auto& boid : boids) {
-		glm::vec3 forceCohesion = cohesion(boid, boids, neighborRadius);
-		glm::vec3 forceSeparation = separation(boid, boids, avoidBoids);
-		glm::vec3 forceSeparationObstacles = separationObstacles(boid, obstacles, avoidObstacles);
-		glm::vec3 forceSeparationBuildings = separationBuildings(boid, buildings);
-		glm::vec3 forceAlignment = alignment(boid, boids, neighborRadius);
-		glm::vec3 forceattraction = attraction(boid);
+		int gridKey = getGridKey(boid.position);
+		spatialGrid[gridKey].push_back(&boid);
+	}
 
-		boid.acceleration = forceAlignment + forceCohesion + forceSeparation + forceSeparationObstacles * 5 + forceSeparationBuildings * 10 + forceattraction;
-		boid.velocity += boid.acceleration * deltaTime;
+	for (auto& boid : boids) {
+		glm::vec3 forceCohesion(0.0f), forceSeparation(0.0f), forceAlignment(0.0f);
+		int count = 0;
+
+		// Sprawdź aktualną komórkę + sąsiadujące
+		for (int dx = -1; dx <= 1; dx++) {
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dz = -1; dz <= 1; dz++) {
+					int neighborKey = getGridKey(boid.position + glm::vec3(dx * gridSize, dy * gridSize, dz * gridSize));
+					if (spatialGrid.find(neighborKey) != spatialGrid.end()) {
+						for (auto& other : spatialGrid[neighborKey]) {
+							if (other == &boid) continue;
+							forceCohesion += cohesion(boid, boids, neighborRadius);
+							forceSeparation += separation(boid, boids, avoidBoids);
+							forceAlignment += alignment(boid, boids, neighborRadius);
+							count++;
+						}
+					}
+				}
+			}
+		}
+
+		if (count > 0) {
+			forceCohesion /= count;
+			forceSeparation /= count;
+			forceAlignment /= count;
+		}
+
+		glm::vec3 forceSeparationObstacles = separationObstacles(boid, obstacles, avoidObstacles);
+		glm::vec3 forceSeparationBuildings = separationBuildings(boid, buildings) * 0.5f;
+		glm::vec3 forceAttraction = attraction(boid);
+
+		boid.acceleration = forceAlignment + forceCohesion + forceSeparation
+			+ forceSeparationObstacles * 2 + forceSeparationBuildings * 5
+			+ forceAttraction;
+		boid.velocity += boid.acceleration * deltaTime * 0.8f;
 		boid.velocity = limitSpeed(boid.velocity, maxSpeed);
 		boid.position += boid.velocity * deltaTime;
 
-		
 		checkPosition(boid, minBoundary, maxBoundary);
-
-		updateKDOP(boid);
+		updateKDOPBoid(boid);
 	}
 }
 
@@ -989,7 +1014,7 @@ void processInput(GLFWwindow* window)
 		obstacle.size = 0.1f;          // Przykładowy rozmiar
 		obstacle.vertices = sphereContext.getVertices();
 		obstacle.indices = sphereContext.getIndices();
-		updateKDOP(obstacle);
+		updateKDOPObstacle(obstacle);
 		obstacles.push_back(obstacle);
 	}
 	if (glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS) {
