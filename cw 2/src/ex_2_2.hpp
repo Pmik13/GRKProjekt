@@ -211,8 +211,8 @@ std::vector<unsigned int> indices;
 float frequencyValue = 0.9f;
 
 float Boundryfloat = 2.0f;
-glm::vec3 minBoundary = glm::vec3(-Boundryfloat, -Boundryfloat, -Boundryfloat);
-glm::vec3 maxBoundary = glm::vec3(Boundryfloat, Boundryfloat, Boundryfloat);
+glm::vec3 minBoundary = glm::vec3(-10.0f, -Boundryfloat, -10.0f);
+glm::vec3 maxBoundary = glm::vec3(10.0f, Boundryfloat, 10.0f);
 
 void addBuilding(glm::vec3 buildPos, glm::vec3 buildSize = glm::vec3(0.5f, 1.0f, 1.0f)) {
 	Building building;
