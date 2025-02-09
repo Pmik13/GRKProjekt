@@ -174,6 +174,7 @@ namespace texture {
 	GLuint dove;
 	GLuint building;
 	GLuint buildingNormal;
+	GLuint bird;
 }
 
 float amountOfBoids = 50.f;
@@ -216,7 +217,7 @@ std::vector<float> vertices;
 std::vector<unsigned int> indices;
 
 //float frequencyValue = 0.1f;
- float frequencyValue = 0.9f; // -1.9
+ float frequencyValue = 0.5f; // -1.9
 
 float Boundryfloat = 2.0f;
 glm::vec3 minBoundary = glm::vec3(-10.0f, -Boundryfloat, -10.0f);
@@ -411,7 +412,7 @@ void generateTerrain() {
 
 	for (int x = 0; x < terrainWidth; x++) {
 		for (int y = 0; y < terrainHeight; y++) {
-			float value = noise.GetNoise((float)x * 0.1f, (float)y * 0.1f);
+			float value = noise.GetNoise((float)x * 0.05f, (float)y * 0.05f);
 			terrain[x][y] = value - 1.9f;//2.1f; // Scale height for visibility
 			//std::cout << "terrain[" << x << "][" << y << "] = " << terrain[x][y] << std::endl;
 		}
@@ -508,11 +509,8 @@ void initTerrain(const std::vector<float>& vertices, const std::vector<unsigned 
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
 
-	glBindVertexArray(VAOTer);
-	glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-
-
 	glBindVertexArray(0);
+	
 
 }
 
@@ -531,8 +529,6 @@ void renderTerrain() {
 	glBindVertexArray(VAOTer);
 	glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);
-
-	glUseProgram(0);
 }
 
 bool checkCollision(const glm::vec3& min1, const glm::vec3& max1, const glm::vec3& min2, const glm::vec3& max2) {
@@ -909,10 +905,10 @@ void drawBoids(bool shadow, glm::mat4 lightViewProjectionMatrix) {
 		}
 		else {
 			if (shadowMappingEnabled) {
-				drawObjectTextureShadow(coneContext, modelMatrix, texture::dove);
+				drawObjectTextureShadow(coneContext, modelMatrix, texture::bird);
 			}
 			else {
-				drawObjectTexture(coneContext, modelMatrix, texture::dove);
+				drawObjectTexture(coneContext, modelMatrix, texture::bird);
 			}
 		}
 	}
@@ -964,18 +960,18 @@ void drawBuildings(bool shadow, glm::mat4 lightViewProjectionMatrix) {
 		else {
 			if (normalMappingEnabled) {
 				if (shadowMappingEnabled) {
-					drawObjectNormalShadow(buildingContext, modelMatrix, texture::steel, texture::steelNormal);
+					drawObjectNormalShadow(buildingContext, modelMatrix, texture::building, texture::buildingNormal);
 				}
 				else {
-					drawObjectNormal(buildingContext, modelMatrix, texture::steel, texture::steelNormal);
+					drawObjectNormal(buildingContext, modelMatrix, texture::building, texture::buildingNormal);
 				}
 			}
 			else {
 				if (shadowMappingEnabled) {
-					drawObjectTextureShadow(buildingContext, modelMatrix, texture::steel);
+					drawObjectTextureShadow(buildingContext, modelMatrix, texture::building);
 				}
 				else {
-					drawObjectTexture(buildingContext, modelMatrix, texture::steel);
+					drawObjectTexture(buildingContext, modelMatrix, texture::building);
 				}
 			}
 		}
@@ -1037,33 +1033,25 @@ void renderScene(GLFWwindow* window)
 	glm::mat4 view = createCameraMatrix();
 	glm::mat4 projection = createPerspectiveMatrix();
 	drawSkybox(view, projection);
-	
+
+	glUseProgram(program);
+
 	if (shadowMappingEnabled) {
 		glCullFace(GL_FRONT);
 		renderShadow();
 		glCullFace(GL_BACK);
 	}
 
-	glUseProgram(program);
-	
 	double currentTime = glfwGetTime();
 	double time = currentTime - lastTime;
 	updateBoids(time, neighborRadius, avoidBoids);
 	lastTime = currentTime;
 
+	drawBoids(false, glm::mat4(0.f));
+	makescene(false, glm::mat4(0.f));
 	renderTerrain();
+	drawObstacles(false, glm::mat4(0.f));
 	
-	if (shadowMappingEnabled) {
-		drawBoids(false, glm::mat4(0.f));
-		makescene(false, glm::mat4(0.f));
-		drawObstacles(false, glm::mat4(0.f));
-	}
-	else {
-		drawBoids(false, glm::mat4(0.f));
-		makescene(false, glm::mat4(0.f));
-		drawObstacles(false, glm::mat4(0.f));
-	}
-
 	glm::mat4 cameraMatrix = createCameraMatrix();
 
 	ImGui_ImplOpenGL3_NewFrame();
@@ -1137,6 +1125,7 @@ void init(GLFWwindow* window)
 
 	texture::building = Core::LoadTexture("./textures/building.jpg");
 	texture::buildingNormal = Core::LoadTexture("./textures/buildingNormal.jpg");
+	texture::bird = Core::LoadTexture("./textures/ptak.jpg");
 	loadModelToContext("./models/cube.obj", skyboxContext);
 
 	std::vector<std::string> skyboxFaces = {
@@ -1158,42 +1147,6 @@ void shutdown(GLFWwindow* window)
 }
 
 
-//obsluga wejscia
-void processInput(GLFWwindow* window)
-{
-	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-		glfwSetWindowShouldClose(window, true);
-	}
-
-	float angleSpeed = 0.100f;
-	float angleSpeed2 = 1.0f;
-	float moveSpeed = 0.10f;
-	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-		cameraDir = glm::vec3(glm::eulerAngleY(angleSpeed) * glm::vec4(cameraDir, 0));
-	}
-	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-		cameraDir = glm::vec3(glm::eulerAngleY(-angleSpeed) * glm::vec4(cameraDir, 0));
-	}
-	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-		cameraPos += cameraDir * moveSpeed;
-	}
-	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-		cameraPos -= cameraDir * moveSpeed;
-	}
-	if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
-		cameraPos += glm::vec3(0, 1, 0) * moveSpeed;
-	}
-	if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
-		cameraPos -= glm::vec3(0, 1, 0) * moveSpeed;
-	}
-
-	if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
-		Rotation1 -= angleSpeed2;
-	}
-	if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
-		Rotation2 -= angleSpeed2;
-	}
-}
 
 void renderLoop(GLFWwindow* window) {
 	InitImGui(window);
