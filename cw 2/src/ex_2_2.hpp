@@ -54,18 +54,18 @@ glm::vec3 cameraDir = glm::vec3(1.f, 0.f, 0.f);;
 glm::vec3 spaceshipPos = glm::vec3(-4.f, 0, 0);
 glm::vec3 spaceshipDir = glm::vec3(1.f, 0.f, 0.f);
 
-float near_plane = 0.05;
-float far_plane = 20.;
-glm::vec3 lightPos = glm::vec3(5.0f, 15.0f, 5.0f);  // Światło nad sceną
+float near_plane = 0.1;
+float far_plane = 40.;
+glm::vec3 lightPos = glm::vec3(-5.0f, 30.0f, 5.0f);  // Światło nad sceną
 glm::vec3 lightDir = glm::vec3(-1.0f, -1.5f, -1.0f);  // Kierunek w dół pod kątem
 
-glm::mat4 lightVP = glm::ortho(-25.f, 25.f, -15.f, 15.f, near_plane, far_plane) *
+glm::mat4 lightVP = glm::ortho(-100.f, 100.f, -30.f, 30.f, near_plane, far_plane) *
 glm::lookAt(lightPos, lightPos + lightDir, glm::vec3(0, 1, 0));
 
 bool shadowMappingEnabled = true;
 bool normalMappingEnabled = true;
 
-const unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
+const unsigned int SHADOW_WIDTH = 2048, SHADOW_HEIGHT = 2048;
 int WIDTH = 1000, HEIGHT = 1000;
 
 float aspectRatio = 1.f;
@@ -887,6 +887,9 @@ void initDepthMap()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 
+	float borderColor[] = { 1.0f, 1.0f, 1.0f, 1.0f };
+	glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
 	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
 	glDrawBuffer(GL_NONE);
@@ -904,7 +907,9 @@ void renderScene(GLFWwindow* window)
 	drawSkybox(view, projection);
 	
 	if (shadowMappingEnabled) {
+		glCullFace(GL_FRONT);
 		renderShadow();
+		glCullFace(GL_BACK);
 	}
 
 	glUseProgram(program);

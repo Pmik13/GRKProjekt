@@ -26,7 +26,10 @@ float calculateShadow(vec4 shadowCoord)
     float currentDepth = projCoords.z;
 
     float bias = max(0.0025 * (1.0 - dot(normal, lightDir)), 0.0005);
-    float shadow = currentDepth - bias > closestDepth ? 0.3 : 1.0; // 0.3 oznacza cieñ
+    float shadow = currentDepth - bias > closestDepth ? 0.4 : 1.0; // 0.4 oznacza cieñ
+
+    if(projCoords.z > 1.0)
+        shadow = 0.0;
 
     return shadow;
 }
