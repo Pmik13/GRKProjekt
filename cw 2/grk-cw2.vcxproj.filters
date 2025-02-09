@@ -54,9 +54,7 @@
     <None Include="shaders\shader_skybox.vert" />
     <None Include="shaders\shader_tex.frag" />
     <None Include="shaders\shader_tex.vert" />
-    <None Include="shader_terrain.frag" />
     <None Include="shader_terrain.vert" />
     <None Include="shaders\shader_terrain.frag" />
-    <None Include="shaders\shader_terrain.vert" />
   </ItemGroup>
 </Project>

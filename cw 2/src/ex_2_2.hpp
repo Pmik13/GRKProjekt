@@ -4,6 +4,7 @@
 #include "ext.hpp"
 #include <iostream>
 #include <cmath>
+#include <chrono>
 
 #include "Shader_Loader.h"
 #include "Render_Utils.h"
@@ -32,6 +33,7 @@ GLuint programTerrain;
 Core::Shader_Loader shaderLoader;
 GLuint shadowShaderProgram;
 GLuint VAO, VBO;
+GLuint VAOTer, VBOTer, EBOTer;
 GLuint depthMapFBO;
 GLuint depthMap;
 GLuint skyboxTexture;
@@ -46,6 +48,9 @@ float Rotation2 = 0.0f;
 float Rotation3 = 0.0f;
 float cameraAngle = 0;
 float maxSpeed = 1.0f;
+bool isPopupOpen = false;
+bool isButtonClicked = false;
+std::chrono::steady_clock::time_point popupOpenTime;
 
 glm::vec3 obstacleboxsize = glm::vec3(0.05f, 0.05f, 0.05f);
 glm::vec3 buildingboxsize = glm::vec3(0.5f, 0.5f, 0.5f);
@@ -104,6 +109,8 @@ glm::mat4 createCameraMatrix()
 
 	return cameraMatrix;
 }
+
+
 
 GLuint LoadCubemap(std::vector<std::string> faces) {
 	GLuint textureID;
@@ -208,7 +215,8 @@ float terrain[terrainWidth][terrainHeight];
 std::vector<float> vertices;
 std::vector<unsigned int> indices;
 
-float frequencyValue = 0.9f;
+//float frequencyValue = 0.1f;
+ float frequencyValue = 0.9f; // -1.9
 
 float Boundryfloat = 2.0f;
 glm::vec3 minBoundary = glm::vec3(-10.0f, -Boundryfloat, -10.0f);
@@ -227,11 +235,47 @@ void addBuilding(glm::vec3 buildPos, glm::vec3 buildSize = glm::vec3(0.5f, 1.0f,
 void initializeBoids(float numBoids, glm::vec3 color) {
 	for (int i = 0; i < numBoids; i++) {
 		Boid boid;
-		boid.position = glm::vec3(rand() % 10 / 10.0f - 2.5f, rand() % 40 / 10.0f, rand() % 40 / 10.0f);
+		boid.position = glm::vec3(rand() % 10 / 10.0f - 2.5f, rand() % 40 / 10.0f + 10.0f, rand() % 40 / 10.0f);
 		boid.velocity = glm::vec3((rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f);
 		boid.acceleration = glm::vec3(0.0f);
 		boid.color = color;
 		boids.push_back(boid);
+	}
+}
+
+//obsluga wejscia
+void processInput(GLFWwindow* window)
+{
+	if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+		glfwSetWindowShouldClose(window, true);
+	}
+
+	float angleSpeed = 0.100f;
+	float angleSpeed2 = 1.0f;
+	float moveSpeed = 0.10f;
+	if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+		cameraDir = glm::vec3(glm::eulerAngleY(angleSpeed) * glm::vec4(cameraDir, 0));
+	}
+	if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+		cameraDir = glm::vec3(glm::eulerAngleY(-angleSpeed) * glm::vec4(cameraDir, 0));
+	}
+	if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+		cameraPos += cameraDir * moveSpeed;
+	}
+	if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+		cameraPos -= cameraDir * moveSpeed;
+	}
+	if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
+		cameraPos += glm::vec3(0, 1, 0) * moveSpeed;
+	}
+	if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+		cameraPos -= glm::vec3(0, 1, 0) * moveSpeed;
+	}
+	if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS) {
+		Rotation1 -= angleSpeed2;
+	}
+	if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+		Rotation2 -= angleSpeed2;
 	}
 }
 
@@ -244,7 +288,7 @@ void RenderUI() {
 
 	// Set position and size of the window (optional)
 	ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
-	ImGui::SetNextWindowSize(ImVec2(410, 160), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(410, 200), ImGuiCond_Always);
 
 	// Begin the ImGui window
 	ImGui::Begin("UI Control Panel", NULL, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize);
@@ -253,11 +297,11 @@ void RenderUI() {
 	ImGui::SliderFloat("Boids:radius avoidBoid", &avoidBoids, 0.0f, 4.0f);
 	ImGui::SliderFloat("Boids:radius avoidObstacle ", &avoidObstacles, 0.0f, 4.0f);
 	ImGui::SliderFloat("Boids: Boundry ", &Boundryfloat, 0.0f, 10.0f);
-	bool sliderChanged = ImGui::SliderFloat("Boids: number", &amountOfBoids, 0, 100);
-
+	bool sliderChangedAmountBoids = ImGui::SliderFloat("Boids: number", &amountOfBoids, 0, 100);
+	//bool sliderFrequencyChanged = = ImGui::SliderFloat("Terrain: Frequency", &amountOfBoids, 0, 100);
 
 	// Check if the slider value has changed
-	if (sliderChanged) {
+	if (sliderChangedAmountBoids) {
 		boids.clear();
 		initializeBoids(amountOfBoids/2, glm::vec3(0.0, 1.0, 0.3));
 		initializeBoids(amountOfBoids/2, glm::vec3(0.0, 0.0, 1.0));
@@ -267,6 +311,58 @@ void RenderUI() {
 	if (ImGui::Button(normalMappingEnabled ? "Disable Normal Mapping" : "Enable Normal Mapping")) {
 		normalMappingEnabled = !normalMappingEnabled;
 	}
+
+	if (ImGui::Button("Spawn Obstacle")) {
+		// Do something when the button is clicked
+		Obstacle obstacle;
+		obstacle.position = cameraPos + cameraDir; // Pozycja przeszkody
+		obstacle.size = 0.1f;          // Przykładowy rozmiar
+		obstacle.minbox = obstacle.position - obstacleboxsize;
+		obstacle.maxbox = obstacle.position + obstacleboxsize;
+		obstacles.push_back(obstacle);
+	}
+
+	if (ImGui::Button(isButtonClicked ? "Disable Attract" : "Enable Attract")) {
+		attract = (attract + 1) % 2;
+		isButtonClicked = !isButtonClicked;
+
+		isPopupOpen = true;
+		ImGui::OpenPopup(attract ? "Enable Popup Attract" : "Disable Popup Attract");
+		popupOpenTime = std::chrono::steady_clock::now();
+			
+	}
+
+	if (!isButtonClicked) {
+		attract = 0;
+	}
+
+	if (isPopupOpen) {
+
+		if (ImGui::BeginPopupModal("Enable Popup Attract", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("Boid attraction is enabled!");
+
+			auto now = std::chrono::steady_clock::now();
+			if (std::chrono::duration<float>(now - popupOpenTime).count() >= 2.f) {
+				isPopupOpen = false;
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();  // End the popup
+		}
+
+		if (ImGui::BeginPopupModal("Disable Popup Attract", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
+			ImGui::Text("Boid attraction is disabled!");
+
+			auto now = std::chrono::steady_clock::now();
+			if (std::chrono::duration<float>(now - popupOpenTime).count() >= 2.f) {
+				isPopupOpen = false;
+				ImGui::CloseCurrentPopup();
+			}
+
+			ImGui::EndPopup();  // End the popup
+		}
+	}
+
 	ImGui::Dummy(ImVec2(5, 5));
 	if (ImGui::Button(shadowMappingEnabled ? "Disable Shadow Mapping" : "Enable Shadow Mapping")) {
 		shadowMappingEnabled = !shadowMappingEnabled;
@@ -316,7 +412,7 @@ void generateTerrain() {
 	for (int x = 0; x < terrainWidth; x++) {
 		for (int y = 0; y < terrainHeight; y++) {
 			float value = noise.GetNoise((float)x * 0.1f, (float)y * 0.1f);
-			terrain[x][y] = value - 1.9f; // Scale height for visibility
+			terrain[x][y] = value - 1.9f;//2.1f; // Scale height for visibility
 			//std::cout << "terrain[" << x << "][" << y << "] = " << terrain[x][y] << std::endl;
 		}
 	}
@@ -332,6 +428,14 @@ void createTerrainMesh(std::vector<float>& vertices, std::vector<unsigned int>& 
 			vertices.push_back(x - halfWidth);   // X coordinate
 			vertices.push_back(terrain[x][y] + 1.4f);  // Y (height)
 			vertices.push_back(y - halfHeight); // Z coordinate
+
+			float r = (terrain[x][y] + 1.4f) / 10.0f; // Normalize height for color (adjust as needed)
+			float g = 0.5f;                // Fixed green value (adjust for different effects)
+			float b = 1.0f - r;            // Inverse of red for variation
+
+			vertices.push_back(r);
+			vertices.push_back(g);
+			vertices.push_back(b);
 
 			// Texture Coordinates (Normalized)
 			//float u = (float)x/halfWidth;  // U coordinate, normalized
@@ -383,48 +487,52 @@ void setupBuildings() {
 	}
 }
 
-// Function to render the terrain
-void renderTerrain(const std::vector<float>& vertices, const std::vector<unsigned int>& indices) {
-	// Create and bind VAO, VBO, and EBO
-	unsigned int VAO, VBO, EBO;
-	glGenVertexArrays(1, &VAO);
-	glGenBuffers(1, &VBO);
-	glGenBuffers(1, &EBO);
+void initTerrain(const std::vector<float>& vertices, const std::vector<unsigned int>& indices) {
+	glGenVertexArrays(1, &VAOTer);
+	glGenBuffers(1, &VBOTer);
+	glGenBuffers(1, &EBOTer);
 
-	glBindVertexArray(VAO);
+	glBindVertexArray(VAOTer);
 
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, VBOTer);
 	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STATIC_DRAW);
 
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBOTer);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
 
-	// Define vertex attribute pointers
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	// Position attribute
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
-	
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+	// Color attribute
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+
+	glBindVertexArray(VAOTer);
+	glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+
+
 	glBindVertexArray(0);
 
-	//// Use the shader program for rendering
+}
+
+// Function to render the terrain
+void renderTerrain() {
 	//glUseProgram(programTerrain);
 
-	//// Set the transformation matrix for the terrain
-	//glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
-	//glUniformMatrix4fv(glGetUniformLocation(programTerrain, "model"), 1, GL_FALSE, glm::value_ptr(viewProjectionMatrix));
+	//glm::mat4 model = glm::mat4(1.0f);
+	//glm::mat4 view = createCameraMatrix();
+	//glm::mat4 projection = createPerspectiveMatrix();
 
-	// Use your shader program
-	// glUseProgram(shaderProgram);
-	glUseProgram(programTerrain);
+	//glUniformMatrix4fv(glGetUniformLocation(programTerrain, "model"), 1, GL_FALSE, glm::value_ptr(model));
+	//glUniformMatrix4fv(glGetUniformLocation(programTerrain, "view"), 1, GL_FALSE, glm::value_ptr(view));
+	//glUniformMatrix4fv(glGetUniformLocation(programTerrain, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 
-	// Set the transformation matrix for the terrain
-	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
-	glUniformMatrix4fv(glGetUniformLocation(programTerrain, "model"), 1, GL_FALSE, glm::value_ptr(viewProjectionMatrix));
-
-	// Bind the VAO and draw the terrain
-	glBindVertexArray(VAO);
+	glBindVertexArray(VAOTer);
 	glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);
+
+	glUseProgram(0);
 }
 
 bool checkCollision(const glm::vec3& min1, const glm::vec3& max1, const glm::vec3& min2, const glm::vec3& max2) {
@@ -877,8 +985,6 @@ void drawBuildings(bool shadow, glm::mat4 lightViewProjectionMatrix) {
 void makescene(bool shadow, glm::mat4 lightViewProjectionMatrix) {
 
 	drawBuildings(shadow, lightViewProjectionMatrix);
-	renderTerrain(vertices, indices);
-
 }
 
 void renderShadow() {
@@ -939,11 +1045,14 @@ void renderScene(GLFWwindow* window)
 	}
 
 	glUseProgram(program);
-
+	
 	double currentTime = glfwGetTime();
 	double time = currentTime - lastTime;
 	updateBoids(time, neighborRadius, avoidBoids);
 	lastTime = currentTime;
+
+	renderTerrain();
+	
 	if (shadowMappingEnabled) {
 		drawBoids(false, glm::mat4(0.f));
 		makescene(false, glm::mat4(0.f));
@@ -1048,6 +1157,7 @@ void shutdown(GLFWwindow* window)
 	shaderLoader.DeleteProgram(program);
 }
 
+
 //obsluga wejscia
 void processInput(GLFWwindow* window)
 {
@@ -1083,17 +1193,6 @@ void processInput(GLFWwindow* window)
 	if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
 		Rotation2 -= angleSpeed2;
 	}
-	if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS) {
-		Obstacle obstacle;
-		obstacle.position = cameraPos + cameraDir; // Pozycja przeszkody
-		obstacle.size = 0.1f;          // Przykładowy rozmiar
-		obstacle.minbox = obstacle.position - obstacleboxsize;
-		obstacle.maxbox = obstacle.position + obstacleboxsize;
-		obstacles.push_back(obstacle);
-	}
-	if (glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS) {
-		attract = (attract + 1) % 2;
-	}
 }
 
 void renderLoop(GLFWwindow* window) {
@@ -1102,6 +1201,7 @@ void renderLoop(GLFWwindow* window) {
 	generateTerrain();
 	setupBuildings();
 	createTerrainMesh(vertices, indices);
+	initTerrain(vertices, indices);
 
 	while (!glfwWindowShouldClose(window))
 	{
