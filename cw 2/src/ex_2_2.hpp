@@ -55,7 +55,7 @@ std::chrono::steady_clock::time_point popupOpenTime;
 glm::vec3 obstacleboxsize = glm::vec3(0.05f, 0.05f, 0.05f);
 glm::vec3 buildingboxsize = glm::vec3(0.5f, 0.5f, 0.5f);
 glm::vec3 boxsize = glm::vec3(0.2f, 0.2f, 0.2f);
-glm::vec3 cameraPos = glm::vec3(-4.f, 0.0f, 0.0f);
+glm::vec3 cameraPos = glm::vec3(-4.f, 5.0f, 0.0f);
 glm::vec3 cameraDir = glm::vec3(1.f, 0.f, 0.f);;
 glm::vec3 spaceshipPos = glm::vec3(-4.f, 0, 0);
 glm::vec3 spaceshipDir = glm::vec3(1.f, 0.f, 0.f);
@@ -220,8 +220,8 @@ std::vector<unsigned int> indices;
  float frequencyValue = 0.5f; // -1.9
 
 float Boundryfloat = 2.0f;
-glm::vec3 minBoundary = glm::vec3(-10.0f, -Boundryfloat, -10.0f);
-glm::vec3 maxBoundary = glm::vec3(10.0f, Boundryfloat, 10.0f);
+glm::vec3 minBoundary = glm::vec3(-10.0f, 3.0f, -10.0f);
+glm::vec3 maxBoundary = glm::vec3(10.0f, 7.0f, 10.0f);
 
 void addBuilding(glm::vec3 buildPos, glm::vec3 buildSize = glm::vec3(0.5f, 1.0f, 1.0f)) {
 	Building building;
