@@ -54,10 +54,17 @@ glm::vec3 spaceshipDir = glm::vec3(1.f, 0.f, 0.f);
 
 float near_plane = 0.05;
 float far_plane = 20.;
-glm::vec3 lightPos = glm::vec3(0.f, 1.f, 0.f);
+glm::vec3 lightPos = glm::vec3(5.0f, 15.0f, 5.0f);  // Światło nad sceną
+glm::vec3 lightDir = glm::vec3(-1.0f, -1.5f, -1.0f);  // Kierunek w dół pod kątem
 
-bool shadowMappingEnabled = false;
+glm::mat4 lightVP = glm::ortho(-25.f, 25.f, -15.f, 15.f, near_plane, far_plane) *
+glm::lookAt(lightPos, lightPos + lightDir, glm::vec3(0, 1, 0));
+
+bool shadowMappingEnabled = true;
 bool normalMappingEnabled = true;
+
+const unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
+int WIDTH = 1000, HEIGHT = 1000;
 
 float aspectRatio = 1.f;
 
@@ -221,6 +228,10 @@ void RenderUI() {
 	if (ImGui::Button(normalMappingEnabled ? "Disable Normal Mapping" : "Enable Normal Mapping")) {
 		normalMappingEnabled = !normalMappingEnabled;
 	}
+	ImGui::Dummy(ImVec2(5, 5));
+	if (ImGui::Button(shadowMappingEnabled ? "Disable Shadow Mapping" : "Enable Shadow Mapping")) {
+		shadowMappingEnabled = !shadowMappingEnabled;
+	}
 	// End the ImGui window5
 	ImGui::End();
 }
@@ -306,7 +317,7 @@ void createTerrainMesh(std::vector<float>& vertices, std::vector<unsigned int>& 
 }
 
 void setupBuildings() {
-	int buildingSpacing = 5;  // Space between buildings
+	int buildingSpacing = 6;  // Space between buildings
 	int gridSize = 50;        // Grid size (same as terrain)
 
 	for (int x = 0; x < gridSize; x += buildingSpacing) {
@@ -325,7 +336,6 @@ void setupBuildings() {
 		}
 	}
 }
-
 
 // Function to render the terrain
 void renderTerrain(const std::vector<float>& vertices, const std::vector<unsigned int>& indices) {
@@ -358,8 +368,6 @@ void renderTerrain(const std::vector<float>& vertices, const std::vector<unsigne
 	glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);
 }
-
-
 
 bool checkCollision(const glm::vec3& min1, const glm::vec3& max1, const glm::vec3& min2, const glm::vec3& max2) {
 	// Sprawdzamy, czy zakresy na każdej z osi się nie nakładają
@@ -670,18 +678,6 @@ glm::mat4 createPerspectiveMatrix()
 	return perspectiveMatrix;
 }
 
-void drawObjectColor(Core::RenderContext& context, glm::mat4 modelMatrix, glm::vec3 color) {
-
-	glUseProgram(program);
-	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
-	glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
-	glUniformMatrix4fv(glGetUniformLocation(program, "transformation"), 1, GL_FALSE, (float*)&transformation);
-	glUniformMatrix4fv(glGetUniformLocation(program, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
-	glUniform3f(glGetUniformLocation(program, "color"), color.x, color.y, color.z);
-	glUniform3f(glGetUniformLocation(program, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
-	Core::DrawContext(context);
-
-}
 void drawObjectTexture(Core::RenderContext& context, glm::mat4 modelMatrix, GLuint texture) {
 
 	glUseProgram(programTex);
@@ -690,9 +686,13 @@ void drawObjectTexture(Core::RenderContext& context, glm::mat4 modelMatrix, GLui
 	glUniformMatrix4fv(glGetUniformLocation(programTex, "transformation"), 1, GL_FALSE, (float*)&transformation);
 	glUniformMatrix4fv(glGetUniformLocation(programTex, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
 	glUniform3f(glGetUniformLocation(programTex, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
+	glUniform3f(glGetUniformLocation(programTex, "lightDir"), lightDir.x, lightDir.y, lightDir.z);
 	Core::SetActiveTexture(texture, "colorTexture", programTex, 0);
-	Core::DrawContext(context);
 
+	glUniformMatrix4fv(glGetUniformLocation(programTex, "LightVP"), 1, GL_FALSE, (float*)&lightVP);
+	Core::SetActiveTexture(depthMap, "depthMap", programTex, 1);
+
+	Core::DrawContext(context);
 }
 
 void drawObjectNormal(Core::RenderContext& context, glm::mat4 modelMatrix, GLuint textureID, GLuint normalmapId, GLuint Program) {
@@ -702,27 +702,25 @@ void drawObjectNormal(Core::RenderContext& context, glm::mat4 modelMatrix, GLuin
 	glUniformMatrix4fv(glGetUniformLocation(Program, "transformation"), 1, GL_FALSE, (float*)&transformation);
 	glUniformMatrix4fv(glGetUniformLocation(Program, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
 	glUniform3f(glGetUniformLocation(Program, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
+	glUniform3f(glGetUniformLocation(Program, "lightDir"), lightDir.x, lightDir.y, lightDir.z);
 
 	Core::SetActiveTexture(textureID, "colorTexture", Program, 0);
 	Core::SetActiveTexture(normalmapId, "normalSampler", Program, 1);
-	Core::DrawContext(context);
 
+	glUniformMatrix4fv(glGetUniformLocation(Program, "LightVP"), 1, GL_FALSE, (float*)&lightVP);
+	Core::SetActiveTexture(depthMap, "depthMap", Program, 2);
+
+	Core::DrawContext(context);
 }
 
-void drawObjectBoid(Core::RenderContext& context, glm::mat4 modelMatrix, const Boid& boid) {
-	glm::vec3 color = boid.color;
-	glUseProgram(program);
-	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
-	glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
-	glUniformMatrix4fv(glGetUniformLocation(program, "transformation"), 1, GL_FALSE, (float*)&transformation);
-	glUniformMatrix4fv(glGetUniformLocation(program, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
-	glUniform3f(glGetUniformLocation(program, "color"), color.x, color.y, color.z);
-	glUniform3f(glGetUniformLocation(program, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
-	Core::DrawContext(context);
+void drawObjectDepth(Core::RenderContext context, glm::mat4 viewProjectionMatrix, glm::mat4 modelMatrix) {
 
+	glUniformMatrix4fv(glGetUniformLocation(shadowShaderProgram, "viewProjectionMatrix"), 1, GL_FALSE, (float*)&viewProjectionMatrix);
+	glUniformMatrix4fv(glGetUniformLocation(shadowShaderProgram, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
+	Core::DrawContext(context);
 }
 
-void drawBoids() {
+void drawBoids(bool shadow, glm::mat4 lightViewProjectionMatrix) {
 	for (const auto& boid : boids) {
 		glm::vec3 forward = glm::normalize(boid.velocity);
 		glm::vec3 Up = glm::vec3(0, 1, 0);
@@ -741,11 +739,16 @@ void drawBoids() {
 
 		glm::mat4 modelMatrix = translationMatrix * rotationMatrix;
 
-		drawObjectTexture(coneContext, modelMatrix, texture::dove);
+		if (shadow) {
+			drawObjectDepth(coneContext, lightViewProjectionMatrix, modelMatrix);
+		}
+		else {
+			drawObjectTexture(coneContext, modelMatrix, texture::dove);
+		}
 	}
 }
 
-void drawObstacles() {
+void drawObstacles(bool shadow, glm::mat4 lightViewProjectionMatrix) {
 	for (const auto& obstacle : obstacles) {
 		// Najpierw translacja
 		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), obstacle.position);
@@ -753,17 +756,21 @@ void drawObstacles() {
 		// Następnie skalowanie
 		modelMatrix = glm::scale(modelMatrix, glm::vec3(obstacle.size, obstacle.size, obstacle.size));
 
-		// Rysowanie obiektu
-		if (normalMappingEnabled) {
-			drawObjectNormal(sphereContext, modelMatrix, texture::earth, texture::earthNormal, programNormal);
+		if (shadow) {
+			drawObjectDepth(sphereContext, lightViewProjectionMatrix, modelMatrix);
 		}
 		else {
-			drawObjectTexture(sphereContext, modelMatrix, texture::earth);
+			if (normalMappingEnabled) {
+				drawObjectNormal(sphereContext, modelMatrix, texture::earth, texture::earthNormal, programNormal);
+			}
+			else {
+				drawObjectTexture(sphereContext, modelMatrix, texture::earth);
+			}
 		}
 	}
 }
 
-void drawBuildings() {
+void drawBuildings(bool shadow, glm::mat4 lightViewProjectionMatrix) {
 	for (const auto& building : buildings) {
 		// Najpierw translacja
 		glm::mat4 modelMatrix = glm::translate(glm::mat4(1.0f), building.position);
@@ -771,20 +778,64 @@ void drawBuildings() {
 		// Następnie skalowanie
 		modelMatrix = glm::scale(modelMatrix, glm::vec3(building.size.x, building.size.y, building.size.z));
 
-		if (normalMappingEnabled) {
-			drawObjectNormal(buildingContext, modelMatrix, texture::steel, texture::steelNormal, programNormal);
+		if (shadow) {
+			drawObjectDepth(buildingContext, lightViewProjectionMatrix, modelMatrix);
 		}
 		else {
-			drawObjectTexture(buildingContext, modelMatrix, texture::steel);
+			if (normalMappingEnabled) {
+				drawObjectNormal(buildingContext, modelMatrix, texture::steel, texture::steelNormal, programNormal);
+			}
+			else {
+				drawObjectTexture(buildingContext, modelMatrix, texture::steel);
+			}
 		}
 	}
 }
 
-void makescene() {
+void makescene(bool shadow, glm::mat4 lightViewProjectionMatrix) {
 
-	drawBuildings();
+	drawBuildings(shadow, lightViewProjectionMatrix);
 	renderTerrain(vertices, indices);
 
+}
+
+void renderShadow() {
+	float time = glfwGetTime();
+	glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+
+	glUseProgram(shadowShaderProgram);
+	glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO); 
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	glUseProgram(shadowShaderProgram);
+
+	drawBoids(true, lightVP);
+	makescene(true, lightVP);
+	drawObstacles(true, lightVP);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, 0, WIDTH, HEIGHT);
+}
+
+void initDepthMap()
+{
+	glGenFramebuffers(1, &depthMapFBO);
+
+	glGenTextures(1, &depthMap);
+	glBindTexture(GL_TEXTURE_2D, depthMap);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT,
+		SHADOW_WIDTH, SHADOW_HEIGHT, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
+	glDrawBuffer(GL_NONE);
+	glReadBuffer(GL_NONE);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void renderScene(GLFWwindow* window)
@@ -795,6 +846,10 @@ void renderScene(GLFWwindow* window)
 	glm::mat4 view = createCameraMatrix();
 	glm::mat4 projection = createPerspectiveMatrix();
 	drawSkybox(view, projection);
+	
+	if (shadowMappingEnabled) {
+		renderShadow();
+	}
 
 	glUseProgram(program);
 
@@ -802,9 +857,9 @@ void renderScene(GLFWwindow* window)
 	double time = currentTime - lastTime;
 	updateBoids(time, neighborRadius, avoidBoids);
 	lastTime = currentTime;
-	drawBoids();
-	makescene();
-	drawObstacles();
+	drawBoids(false, glm::mat4(0.f));
+	makescene(false, glm::mat4(0.f));
+	drawObstacles(false, glm::mat4(0.f));
 
 	glm::mat4 cameraMatrix = createCameraMatrix();
 
@@ -822,9 +877,13 @@ void renderScene(GLFWwindow* window)
 
 	glfwSwapBuffers(window);
 }
+
 void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
+	aspectRatio = width / float(height);
 	glViewport(0, 0, width, height);
+	WIDTH = width;
+	HEIGHT = height;
 }
 
 struct Vertex {
@@ -849,7 +908,7 @@ void loadModelToContext(std::string path, Core::RenderContext& context)
 void init(GLFWwindow* window)
 {
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-	
+	initDepthMap();
 	glEnable(GL_DEPTH_TEST);
 	program = shaderLoader.CreateProgram("shaders/shader.vert", "shaders/shader.frag");
 	programTex = shaderLoader.CreateProgram("shaders/shader_tex.vert", "shaders/shader_tex.frag");
@@ -939,10 +998,6 @@ void processInput(GLFWwindow* window)
 	}
 	if (glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS) {
 		attract = (attract + 1) % 2;
-	}
-	if (glfwGetKey(window, GLFW_KEY_Y) == GLFW_PRESS) {
-		shadowMappingEnabled = !shadowMappingEnabled;  // Zmiana stanu shadow mappingu
-		std::cout << "Shadow Mapping " << (shadowMappingEnabled ? "Enabled" : "Disabled") << std::endl;
 	}
 }
 
