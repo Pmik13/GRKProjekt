@@ -29,7 +29,6 @@ GLuint programTexShadow;
 GLuint programNormalShadow;
 GLuint programTex;
 GLuint programNormal;
-GLuint programTerrain;
 Core::Shader_Loader shaderLoader;
 GLuint shadowShaderProgram;
 GLuint VAO, VBO;
@@ -173,7 +172,7 @@ namespace texture {
 	GLuint bird;
 }
 
-float amountOfBoids = 1.f;
+float amountOfBoids = 7.f;
 float neighborRadius = 1.0f;
 float sightAngle = 120.0f;
 float avoidBoids = 0.4f;
@@ -342,7 +341,7 @@ void RenderUI() {
 
 	// Set position and size of the window (optional)
 	ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
-	ImGui::SetNextWindowSize(ImVec2(410, 200), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(410, 225), ImGuiCond_Always);
 
 	// Begin the ImGui window
 	ImGui::Begin("UI Control Panel", NULL, ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_AlwaysAutoResize);
@@ -351,7 +350,7 @@ void RenderUI() {
 	ImGui::SliderFloat("Boids:radius avoidBoid", &avoidBoids, 0.0f, 4.0f);
 	ImGui::SliderFloat("Boids:radius avoidObstacle ", &avoidObstacles, 0.0f, 4.0f);
 	bool sliderChangedBoundary = ImGui::SliderFloat("Boids: Boundary", &Boundryfloat, 0.0f, 10.0f);
-	bool sliderChangedAmountBoids = ImGui::SliderFloat("Boids: number", &amountOfBoids, 0, 100);
+	bool sliderChangedAmountBoids = ImGui::SliderFloat("Boids: number", &amountOfBoids, 0, 15);
 	//bool sliderFrequencyChanged = = ImGui::SliderFloat("Terrain: Frequency", &amountOfBoids, 0, 100);
 
 	if (sliderChangedBoundary) {
@@ -377,8 +376,9 @@ void RenderUI() {
 		Obstacle obstacle;
 		obstacle.position = cameraPos + cameraDir; // Pozycja przeszkody
 		obstacle.size = 0.1f;          // Przykładowy rozmiar
-		obstacle.minbox = obstacle.position - obstacleboxsize;
-		obstacle.maxbox = obstacle.position + obstacleboxsize;
+		obstacle.vertices = sphereContext.getVertices();
+		obstacle.indices = sphereContext.getIndices();
+		obstacle.setKDOP();
 		obstacles.push_back(obstacle);
 	}
 
@@ -423,7 +423,6 @@ void RenderUI() {
 		}
 	}
 
-	ImGui::Dummy(ImVec2(5, 5));
 	if (ImGui::Button(shadowMappingEnabled ? "Disable Shadow Mapping" : "Enable Shadow Mapping")) {
 		shadowMappingEnabled = !shadowMappingEnabled;
 	}
@@ -625,22 +624,6 @@ void updateKDOPBoid(Boid& boid) {
 		float deltaProj = glm::dot(delta, glm::normalize(boid.DOP[i]));
 		boid.DOP[i] += glm::normalize(boid.DOP[i]) * deltaProj;
 	}
-}
-
-glm::mat4 createCameraMatrix()
-{
-	glm::vec3 cameraSide = glm::normalize(glm::cross(cameraDir, glm::vec3(0.f, 1.f, 0.f)));
-	glm::vec3 cameraUp = glm::normalize(glm::cross(cameraSide, cameraDir));
-	glm::mat4 cameraRotrationMatrix = glm::mat4({
-		cameraSide.x,cameraSide.y,cameraSide.z,0,
-		cameraUp.x,cameraUp.y,cameraUp.z ,0,
-		-cameraDir.x,-cameraDir.y,-cameraDir.z,0,
-		0.,0.,0.,1.,
-		});
-	cameraRotrationMatrix = glm::transpose(cameraRotrationMatrix);
-	glm::mat4 cameraMatrix = cameraRotrationMatrix * glm::translate(-cameraPos);
-
-	return cameraMatrix;
 }
 
 bool insight(const Boid& main, glm::vec3 position, float radius) {
@@ -1200,7 +1183,6 @@ void init(GLFWwindow* window)
 	programNormal = shaderLoader.CreateProgram("shaders/shader_normal.vert", "shaders/shader_normal.frag");
 	programNormalShadow = shaderLoader.CreateProgram("shaders/shader_normal_shadow.vert", "shaders/shader_normal_shadow.frag");
 	programTexShadow = shaderLoader.CreateProgram("shaders/shader_tex_shadow.vert", "shaders/shader_tex_shadow.frag");
-	programTerrain = shaderLoader.CreateProgram("shaders/shader_terrain.vert", "shaders/shader_terrain.frag");
 	loadModelToContext("./models/dove.obj", coneContext);
 	loadModelToContext("./models/sphere.obj", sphereContext);
 	loadModelToContext("./models/cuboid.obj", buildingContext);
