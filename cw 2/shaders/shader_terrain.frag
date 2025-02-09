@@ -1,9 +1,8 @@
 #version 330 core
-out vec4 FragColor;
 
-in vec3 FragPos;  // Receive the position from the vertex shader
+in vec3 vertexColor;  // Input from vertex shader
+out vec4 FragColor;   // Final color output to the screen
 
 void main() {
-    // Set the color to blue
-    FragColor = vec4(0.0, 0.0, 1.0, 1.0); // Blue color
+    FragColor = vec4(vertexColor, 1.0);  // Set the color of the fragment (pixel)
 }
