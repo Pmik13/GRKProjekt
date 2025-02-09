@@ -216,7 +216,7 @@ void addBuilding(glm::vec3 buildPos, glm::vec3 buildSize = glm::vec3(0.5f, 1.0f,
 void initializeBoids(float numBoids, glm::vec3 color) {
 	for (int i = 0; i < numBoids; i++) {
 		Boid boid;
-		boid.position = glm::vec3(rand() % 5 / 10.0f - 2.5f, rand() % 10 / 10.0f, rand() % 10 / 10.0f);
+		boid.position = glm::vec3(rand() % 10 / 10.0f - 2.5f, rand() % 40 / 10.0f, rand() % 40 / 10.0f);
 		boid.velocity = glm::vec3((rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f);
 		boid.acceleration = glm::vec3(0.0f);
 		boid.color = color;
