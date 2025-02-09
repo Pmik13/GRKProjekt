@@ -26,6 +26,7 @@
 GLuint program;
 GLuint programTex;
 GLuint programNormal;
+GLuint programTerrain;
 Core::Shader_Loader shaderLoader;
 GLuint shadowShaderProgram;
 GLuint VAO, VBO;
@@ -46,7 +47,7 @@ float maxSpeed = 1.0f;
 
 glm::vec3 obstacleboxsize = glm::vec3(0.05f, 0.05f, 0.05f);
 glm::vec3 buildingboxsize = glm::vec3(0.5f, 0.5f, 0.5f);
-glm::vec3 boxsize = glm::vec3(0.05f, 0.05f, 0.05f);
+glm::vec3 boxsize = glm::vec3(0.2f, 0.2f, 0.2f);
 glm::vec3 cameraPos = glm::vec3(-4.f, 0.0f, 0.0f);
 glm::vec3 cameraDir = glm::vec3(1.f, 0.f, 0.f);;
 glm::vec3 spaceshipPos = glm::vec3(-4.f, 0, 0);
@@ -60,6 +61,40 @@ bool shadowMappingEnabled = false;
 bool normalMappingEnabled = true;
 
 float aspectRatio = 1.f;
+
+glm::mat4 createPerspectiveMatrix()
+{
+	glm::mat4 perspectiveMatrix;
+	float a1 = glm::min(aspectRatio, 1.f);
+	float a2 = glm::min(1 / aspectRatio, 1.f);
+	perspectiveMatrix = glm::mat4({
+		1,0.,0.,0.,
+		0.,aspectRatio,0.,0.,
+		0.,0.,(far_plane + near_plane) / (near_plane - far_plane),2 * far_plane * near_plane / (near_plane - far_plane),
+		0.,0.,-1.,0.,
+		});
+
+	perspectiveMatrix = glm::transpose(perspectiveMatrix);
+
+	return perspectiveMatrix;
+}
+
+
+glm::mat4 createCameraMatrix()
+{
+	glm::vec3 cameraSide = glm::normalize(glm::cross(cameraDir, glm::vec3(0.f, 1.f, 0.f)));
+	glm::vec3 cameraUp = glm::normalize(glm::cross(cameraSide, cameraDir));
+	glm::mat4 cameraRotrationMatrix = glm::mat4({
+		cameraSide.x,cameraSide.y,cameraSide.z,0,
+		cameraUp.x,cameraUp.y,cameraUp.z ,0,
+		-cameraDir.x,-cameraDir.y,-cameraDir.z,0,
+		0.,0.,0.,1.,
+		});
+	cameraRotrationMatrix = glm::transpose(cameraRotrationMatrix);
+	glm::mat4 cameraMatrix = cameraRotrationMatrix * glm::translate(-cameraPos);
+
+	return cameraMatrix;
+}
 
 GLuint LoadCubemap(std::vector<std::string> faces) {
 	GLuint textureID;
@@ -183,7 +218,7 @@ void addBuilding(glm::vec3 buildPos, glm::vec3 buildSize = glm::vec3(0.5f, 1.0f,
 void initializeBoids(float numBoids, glm::vec3 color) {
 	for (int i = 0; i < numBoids; i++) {
 		Boid boid;
-		boid.position = glm::vec3(rand() % 5 / 10.0f - 2.5f, rand() % 10 / 10.0f, rand() % 10 / 10.0f);
+		boid.position = glm::vec3(rand() % 10 / 10.0f - 2.5f, rand() % 40 / 10.0f, rand() % 40 / 10.0f);
 		boid.velocity = glm::vec3((rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f);
 		boid.acceleration = glm::vec3(0.0f);
 		boid.color = color;
@@ -268,7 +303,8 @@ void generateTerrain() {
 	for (int x = 0; x < terrainWidth; x++) {
 		for (int y = 0; y < terrainHeight; y++) {
 			float value = noise.GetNoise((float)x * 0.1f, (float)y * 0.1f);
-			terrain[x][y] = value - 2.0f; // Scale height for visibility
+			terrain[x][y] = value - 1.9f; // Scale height for visibility
+			//std::cout << "terrain[" << x << "][" << y << "] = " << terrain[x][y] << std::endl;
 		}
 	}
 }
@@ -283,6 +319,12 @@ void createTerrainMesh(std::vector<float>& vertices, std::vector<unsigned int>& 
 			vertices.push_back(x - halfWidth);   // X coordinate
 			vertices.push_back(terrain[x][y] + 1.4f);  // Y (height)
 			vertices.push_back(y - halfHeight); // Z coordinate
+
+			// Texture Coordinates (Normalized)
+			//float u = (float)x/halfWidth;  // U coordinate, normalized
+			//float v = (float)y/halfHeight; // V coordinate, normalized
+			//vertices.push_back(u);  // U
+			//vertices.push_back(v);  // V
 		}
 	}
 
@@ -348,9 +390,16 @@ void renderTerrain(const std::vector<float>& vertices, const std::vector<unsigne
 	// Define vertex attribute pointers
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
-
+	
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindVertexArray(0);
+
+	//// Use the shader program for rendering
+	//glUseProgram(programTerrain);
+
+	//// Set the transformation matrix for the terrain
+	//glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
+	//glUniformMatrix4fv(glGetUniformLocation(programTerrain, "model"), 1, GL_FALSE, glm::value_ptr(viewProjectionMatrix));
 
 	// Use your shader program
 	// glUseProgram(shaderProgram);
@@ -365,8 +414,6 @@ void renderTerrain(const std::vector<float>& vertices, const std::vector<unsigne
 	glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
 	glBindVertexArray(0);
 }
-
-
 
 bool checkCollision(const glm::vec3& min1, const glm::vec3& max1, const glm::vec3& min2, const glm::vec3& max2) {
 	// Sprawdzamy, czy zakresy na każdej z osi się nie nakładają
@@ -393,21 +440,6 @@ void checkCollisionBoid(Boid& boid) {
 	}
 }
 
-glm::mat4 createCameraMatrix()
-{
-	glm::vec3 cameraSide = glm::normalize(glm::cross(cameraDir, glm::vec3(0.f, 1.f, 0.f)));
-	glm::vec3 cameraUp = glm::normalize(glm::cross(cameraSide, cameraDir));
-	glm::mat4 cameraRotrationMatrix = glm::mat4({
-		cameraSide.x,cameraSide.y,cameraSide.z,0,
-		cameraUp.x,cameraUp.y,cameraUp.z ,0,
-		-cameraDir.x,-cameraDir.y,-cameraDir.z,0,
-		0.,0.,0.,1.,
-		});
-	cameraRotrationMatrix = glm::transpose(cameraRotrationMatrix);
-	glm::mat4 cameraMatrix = cameraRotrationMatrix * glm::translate(-cameraPos);
-
-	return cameraMatrix;
-}
 bool insight(const Boid& main, glm::vec3 position, float radius) {
 	glm::vec3 directionToBoid2 = position - main.position;
 
@@ -660,22 +692,7 @@ void updateBoids(float deltaTime, float neighborRadius, float avoidBoids) {
 	}
 }
 
-glm::mat4 createPerspectiveMatrix()
-{
-	glm::mat4 perspectiveMatrix;
-	float a1 = glm::min(aspectRatio, 1.f);
-	float a2 = glm::min(1 / aspectRatio, 1.f);
-	perspectiveMatrix = glm::mat4({
-		1,0.,0.,0.,
-		0.,aspectRatio,0.,0.,
-		0.,0.,(far_plane + near_plane) / (near_plane - far_plane),2 * far_plane * near_plane / (near_plane - far_plane),
-		0.,0.,-1.,0.,
-		});
 
-	perspectiveMatrix = glm::transpose(perspectiveMatrix);
-
-	return perspectiveMatrix;
-}
 
 void drawObjectColor(Core::RenderContext& context, glm::mat4 modelMatrix, glm::vec3 color) {
 
@@ -862,6 +879,7 @@ void init(GLFWwindow* window)
 	programTex = shaderLoader.CreateProgram("shaders/shader_tex.vert", "shaders/shader_tex.frag");
 	shadowShaderProgram = shaderLoader.CreateProgram("shaders/shader_shadow.vert", "shaders/shader_shadow.frag");
 	programNormal = shaderLoader.CreateProgram("shaders/shader_normal.vert", "shaders/shader_normal.frag");
+	programTerrain = shaderLoader.CreateProgram("shaders/shader_terrain.vert", "shaders/shader_terrain.frag");
 	loadModelToContext("./models/dove.obj", coneContext);
 	loadModelToContext("./models/sphere.obj", sphereContext);
 	loadModelToContext("./models/cuboid.obj", buildingContext);
