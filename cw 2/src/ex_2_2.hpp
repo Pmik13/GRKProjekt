@@ -451,13 +451,6 @@ void updateKDOPBoid(Boid& boid) {
 	}
 }
 
-void updateKDOPObstacle(Obstacle obstacle) {
-	for (auto& vertex : obstacle.vertices) {
-		vertex = vertex - obstacle.position + obstacle.position;
-	}
-	obstacle.setKDOP();
-}
-
 glm::mat4 createCameraMatrix()
 {
 	glm::vec3 cameraSide = glm::normalize(glm::cross(cameraDir, glm::vec3(0.f, 1.f, 0.f)));
@@ -588,28 +581,28 @@ glm::vec3 separationObstacles(Boid& boid, const std::vector<Obstacle>& obstacles
 	glm::vec3 avoid(0.0f);  // Siła unikania
 	int count = 0;
 
-	for (const auto& other : obstacles) {
-		// Upewnijmy się, że boidy są w zasięgu widzenia i w obrębie unikania
-		if (insight(boid, other.position, avoidObstacles)) {
-			float distance = glm::distance(boid.position, other.position);
-			if (distance < avoidBoids) {
-				glm::vec3 direction = boid.position - other.position;
-				avoid += glm::normalize(direction) / (distance);  // Normalizuj wektor, aby uwzględnić odległość
+	for (const auto& obstacle : obstacles) {
+		if (checkKDOPCollision(boid.DOP, obstacle.DOP)) { // Sprawdzenie KDOP zamiast pozycji
+			glm::vec3 direction = boid.position - obstacle.position;
+			float distance = glm::length(direction);
+
+			if (distance > 0.0f && distance < avoidObstacles) {
+				avoid += glm::normalize(direction) / (distance + 0.1f); // Mniejszy wpływ dalekich obiektów
 				count++;
 			}
 		}
 	}
 
 	if (count > 0) {
-		avoid /= count;  // Przeciętna siła unikania
+		avoid /= count;
+		avoid *= 0.8f; // Zmniejszenie wpływu unikania, żeby boidy nie "drżały"
 	}
 
-	// Jeśli siła unikania jest za mała, zwróć zero, aby uniknąć błędów
 	if (glm::length(avoid) > 0.0f) {
 		return glm::normalize(avoid);  // Znormalizuj, aby siła była stała
 	}
 
-	return glm::vec3(0.0f);
+	return avoid;
 }
 
 glm::vec3 separationBuildings(Boid& boid, const std::vector<Building>& buildings) {
@@ -625,15 +618,14 @@ glm::vec3 separationBuildings(Boid& boid, const std::vector<Building>& buildings
 			float distance = glm::length(direction);
 
 			if (distance > 0.0f) {
-				avoid += glm::normalize(direction) / (distance + 0.1f);  // Dodatkowy współczynnik unikania
+				avoid += glm::normalize(direction) / (distance + 0.2f);
 				count++;
 			}
 		}
 	}
 
-	return (count > 0) ? glm::normalize(avoid) * 0.5f : glm::vec3(0.0f); // Zmniejszony wpływ unikania
+	return (count > 0) ? glm::normalize(avoid) * 0.4f : glm::vec3(0.0f);
 }
-
 
 glm::vec3 alignment(Boid& boid, const std::vector<Boid>& boids, float neighborRadius) {
 	glm::vec3 averageVelocity(0.0f);
@@ -1014,7 +1006,7 @@ void processInput(GLFWwindow* window)
 		obstacle.size = 0.1f;          // Przykładowy rozmiar
 		obstacle.vertices = sphereContext.getVertices();
 		obstacle.indices = sphereContext.getIndices();
-		updateKDOPObstacle(obstacle);
+		obstacle.setKDOP();
 		obstacles.push_back(obstacle);
 	}
 	if (glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS) {
