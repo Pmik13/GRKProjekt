@@ -58,6 +58,8 @@
     <None Include="shaders\shader_2_3.vert" />
     <None Include="shaders\shader_normal.frag" />
     <None Include="shaders\shader_normal.vert" />
+    <None Include="shaders\shader_normal_shadow.frag" />
+    <None Include="shaders\shader_normal_shadow.vert" />
     <None Include="shaders\shader_shadow.frag" />
     <None Include="shaders\shader_shadow.vert" />
     <None Include="shaders\shader_skybox.frag" />
@@ -65,6 +67,9 @@
     <None Include="shaders\shader_terrain.frag" />
     <None Include="shaders\shader_tex.frag" />
     <None Include="shaders\shader_tex.vert" />
+    <None Include="shaders\shader_tex_shadow.frag" />
+    <None Include="shaders\shader_tex_shadow.vert" />
+    <None Include="shader_terrain.frag" />
     <None Include="shader_terrain.vert" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
