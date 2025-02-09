@@ -22,7 +22,7 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-
+#include <unordered_map>
 
 GLuint program;
 GLuint programTexShadow;
@@ -39,7 +39,6 @@ GLuint depthMap;
 GLuint skyboxTexture;
 GLuint programSkybox;
 Core::RenderContext skyboxContext;
-Core::RenderContext shipContext;
 Core::RenderContext buildingContext;
 Core::RenderContext coneContext;
 Core::RenderContext sphereContext;
@@ -93,7 +92,6 @@ glm::mat4 createPerspectiveMatrix()
 	return perspectiveMatrix;
 }
 
-
 glm::mat4 createCameraMatrix()
 {
 	glm::vec3 cameraSide = glm::normalize(glm::cross(cameraDir, glm::vec3(0.f, 1.f, 0.f)));
@@ -109,8 +107,6 @@ glm::mat4 createCameraMatrix()
 
 	return cameraMatrix;
 }
-
-
 
 GLuint LoadCubemap(std::vector<std::string> faces) {
 	GLuint textureID;
@@ -177,34 +173,86 @@ namespace texture {
 	GLuint bird;
 }
 
-float amountOfBoids = 50.f;
+float amountOfBoids = 1.f;
 float neighborRadius = 1.0f;
 float sightAngle = 120.0f;
 float avoidBoids = 0.4f;
 float avoidObstacles = 1.0f;
 double lastTime = 0.0;
 int attract = 0;
+
+std::vector<glm::vec3> compute12DOP(const std::vector<glm::vec3>& vertices, const std::vector<unsigned int>& indices) {
+	std::vector<glm::vec3> DOP(12);  // Wyniki
+	std::vector<glm::vec3> directions = {
+		glm::vec3(1, 0, 0), glm::vec3(-1, 0, 0),
+		glm::vec3(0, 1, 0), glm::vec3(0, -1, 0),
+		glm::vec3(0, 0, 1), glm::vec3(0, 0, -1),
+		glm::normalize(glm::vec3(1, 1, 0)), glm::normalize(glm::vec3(-1, 1, 0)),
+		glm::normalize(glm::vec3(1, -1, 0)), glm::normalize(glm::vec3(-1, -1, 0)),
+		glm::normalize(glm::vec3(1, 0, 1)), glm::normalize(glm::vec3(-1, 0, 1))
+	};
+
+	// Iteruj przez wszystkie kierunki
+	for (int i = 0; i < 12; i++) {
+		float minProj = glm::dot(vertices[indices[0]], directions[i]);  // Projektuj pierwszy wierzchołek
+		float maxProj = minProj;  // Inicjalizuj max i min dla kierunku
+
+		// Iteruj przez wszystkie indeksy wierzchołków
+		for (size_t j = 0; j < indices.size(); j++) {
+			unsigned int idx = indices[j];
+			glm::vec3 vertex = vertices[idx];  // Pobierz wierzchołek za pomocą indeksu
+			float proj = glm::dot(vertex, directions[i]);
+
+			// Zaktualizuj max i min
+			if (proj > maxProj) maxProj = proj;
+			if (proj < minProj) minProj = proj;
+		}
+
+		// Przypisz wynik dla danego kierunku
+		DOP[i] = directions[i] * (maxProj - minProj);
+	}
+
+	return DOP;
+}
+
+
 struct Boid {
 	glm::vec3 position;   // Pozycja boida
 	glm::vec3 velocity;   // Prędkość boida
 	glm::vec3 acceleration; // Przyspieszenie boida
 	glm::vec3 color;
-	glm::vec3 minbox;
-	glm::vec3 maxbox;
+	std::vector<glm::vec3> vertices;
+	std::vector<unsigned int> indices;
+	std::vector<glm::vec3> DOP;
+
+	void setKDOP() {
+		DOP = compute12DOP(vertices, indices);
+	}
 };
+
 struct Obstacle {
 	glm::vec3 position;  // Pozycja przeszkody
 	float size;          // Rozmiar przeszkody (opcjonalnie)
-	glm::vec3 minbox;
-	glm::vec3 maxbox;
-};
-struct Building {
-	glm::vec3 position;  // Pozycja przeszkody
-	glm::vec3 size;          // Rozmiar przeszkody (opcjonalnie)
-	glm::vec3 minbox;
-	glm::vec3 maxbox;
+	std::vector<glm::vec3> vertices;
+	std::vector<glm::vec3> DOP;
+	std::vector<unsigned int> indices;
+
+	void setKDOP() {
+		DOP = compute12DOP(vertices, indices);
+	}
 };
 
+struct Building {
+	glm::vec3 position;
+	glm::vec3 size;
+	std::vector<glm::vec3> vertices;
+	std::vector<glm::vec3> DOP;
+	std::vector<unsigned int> indices;
+
+	void setKDOP() {
+		DOP = compute12DOP(vertices, indices);
+	}
+};
 
 std::vector<Boid> boids;
 std::vector<Obstacle> obstacles;
@@ -223,15 +271,16 @@ float Boundryfloat = 5.0f;
 glm::vec3 minBoundary = glm::vec3(-10.0f - Boundryfloat, 8.0f - Boundryfloat, -10.0f - Boundryfloat);
 glm::vec3 maxBoundary = glm::vec3(10.0f - Boundryfloat, 12.0f - Boundryfloat, 10.0f - Boundryfloat);
 
-void addBuilding(glm::vec3 buildPos, glm::vec3 buildSize = glm::vec3(0.5f, 1.0f, 1.0f)) {
+void addBuilding(glm::vec3 buildPos, glm::vec3 buildSize) {
 	Building building;
-	building.position = buildPos; // Pozycja przeszkody
-	building.size = buildSize;          // Przykładowy rozmiar
-	building.minbox = building.position - buildingboxsize * buildSize;
-	building.maxbox = building.position + buildingboxsize * buildSize;
+	building.position = buildPos;
+	building.size = buildSize;
+	building.vertices = buildingContext.getVertices();
+	building.indices = buildingContext.getIndices();
+	building.setKDOP();
+
 	buildings.push_back(building);
 }
-
 
 void initializeBoids(float numBoids, glm::vec3 color) {
 	for (int i = 0; i < numBoids; i++) {
@@ -240,6 +289,10 @@ void initializeBoids(float numBoids, glm::vec3 color) {
 		boid.velocity = glm::vec3((rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f, (rand() % 20 - 10) / 10.0f);
 		boid.acceleration = glm::vec3(0.0f);
 		boid.color = color;
+		boid.indices = coneContext.getIndices();
+		boid.vertices = coneContext.getVertices();
+
+		boid.setKDOP();
 		boids.push_back(boid);
 	}
 }
@@ -378,8 +431,6 @@ void RenderUI() {
 	ImGui::End();
 }
 
-
-
 void InitImGui(GLFWwindow* window) {
 	std::cout << "Initializing ImGui..." << std::endl;
 
@@ -407,8 +458,6 @@ void InitImGui(GLFWwindow* window) {
 
 	std::cout << "ImGui initialized successfully!" << std::endl;
 }
-
-
 
 // Function to generate terrain based on Perlin noise
 void generateTerrain() {
@@ -488,7 +537,6 @@ void setupBuildings() {
 				float height = 5.0f + (rand() % 10);  // Random building height (5-15 units)
 
 				addBuilding(glm::vec3(x - gridSize / 2, terrainHeight + height / 2.0f, z - gridSize / 2), glm::vec3(2.0f, height, 2.0f));
-
 			}
 		}
 	}
@@ -537,29 +585,62 @@ void renderTerrain() {
 	glBindVertexArray(0);
 }
 
-bool checkCollision(const glm::vec3& min1, const glm::vec3& max1, const glm::vec3& min2, const glm::vec3& max2) {
-	// Sprawdzamy, czy zakresy na każdej z osi się nie nakładają
-	if (max1.x < min2.x || min1.x > max2.x) return false; // Oś X
-	if (max1.y < min2.y || min1.y > max2.y) return false; // Oś Y
-	if (max1.z < min2.z || min1.z > max2.z) return false; // Oś Z
+bool checkKDOPCollision(const std::vector<glm::vec3>& DOP1, const std::vector<glm::vec3>& DOP2) {
+	// Iterujemy przez 12 osi (w przypadku 12DOP)
+	for (int i = 0; i < 12; i++) {
+		// Rzutowanie DOP1
+		float minProj1 = glm::dot(DOP1[0], DOP1[i]);
+		float maxProj1 = minProj1;
 
-	// Jeśli żadna z osi nie jest rozłączna, to kolizja występuje
+		// Zamiast iterować przez wszystkie wierzchołki DOP1, tylko wektory, które tworzą 12DOP
+		for (int j = 1; j < DOP1.size(); j++) {
+			float proj = glm::dot(DOP1[j], DOP1[i]);
+			if (proj > maxProj1) maxProj1 = proj;
+			if (proj < minProj1) minProj1 = proj;
+		}
+
+		// Rzutowanie DOP2
+		float minProj2 = glm::dot(DOP2[0], DOP2[i]);
+		float maxProj2 = minProj2;
+
+		// Zamiast iterować przez wszystkie wierzchołki DOP2, tylko wektory, które tworzą 12DOP
+		for (int j = 1; j < DOP2.size(); j++) {
+			float proj = glm::dot(DOP2[j], DOP2[i]);
+			if (proj > maxProj2) maxProj2 = proj;
+			if (proj < minProj2) minProj2 = proj;
+		}
+
+		// Jeśli przedziały rzutów się nie zachodzą, to nie ma kolizji
+		if (maxProj1 < minProj2 || maxProj2 < minProj1) {
+			return false;
+		}
+	}
 	return true;
 }
 
-void checkCollisionBoid(Boid& boid) {
-	for (const auto& obstacle : obstacles) {
+void updateKDOPBoid(Boid& boid) {
+	glm::vec3 delta = boid.velocity;
 
-		if (checkCollision(boid.minbox, boid.maxbox, obstacle.minbox, obstacle.maxbox)) {
-			boid.color = glm::vec3(1.0, 0.0, 0.0);
-		}
+	for (int i = 0; i < 12; i++) {
+		float deltaProj = glm::dot(delta, glm::normalize(boid.DOP[i]));
+		boid.DOP[i] += glm::normalize(boid.DOP[i]) * deltaProj;
 	}
-	for (const auto& building : buildings) {
+}
 
-		if (checkCollision(boid.minbox, boid.maxbox, building.minbox, building.maxbox)) {
-			boid.color = glm::vec3(1.0, 0.0, 0.0);
-		}
-	}
+glm::mat4 createCameraMatrix()
+{
+	glm::vec3 cameraSide = glm::normalize(glm::cross(cameraDir, glm::vec3(0.f, 1.f, 0.f)));
+	glm::vec3 cameraUp = glm::normalize(glm::cross(cameraSide, cameraDir));
+	glm::mat4 cameraRotrationMatrix = glm::mat4({
+		cameraSide.x,cameraSide.y,cameraSide.z,0,
+		cameraUp.x,cameraUp.y,cameraUp.z ,0,
+		-cameraDir.x,-cameraDir.y,-cameraDir.z,0,
+		0.,0.,0.,1.,
+		});
+	cameraRotrationMatrix = glm::transpose(cameraRotrationMatrix);
+	glm::mat4 cameraMatrix = cameraRotrationMatrix * glm::translate(-cameraPos);
+
+	return cameraMatrix;
 }
 
 bool insight(const Boid& main, glm::vec3 position, float radius) {
@@ -624,8 +705,6 @@ void checkPosition(Boid& boid, glm::vec3 minBoundary, glm::vec3 maxBoundary) {
 	}
 }
 
-
-
 glm::vec3 cohesion(Boid& boid, const std::vector<Boid>& boids, float neighborRadius) {
 	glm::vec3 centerOfMass(0.0f);
 	int count = 0;
@@ -678,66 +757,50 @@ glm::vec3 separationObstacles(Boid& boid, const std::vector<Obstacle>& obstacles
 	glm::vec3 avoid(0.0f);  // Siła unikania
 	int count = 0;
 
+	for (const auto& obstacle : obstacles) {
+		if (checkKDOPCollision(boid.DOP, obstacle.DOP)) { // Sprawdzenie KDOP zamiast pozycji
+			glm::vec3 direction = boid.position - obstacle.position;
+			float distance = glm::length(direction);
 
-	for (const auto& other : obstacles) {
-		// Upewnijmy się, że boidy są w zasięgu widzenia i w obrębie unikania
-		if (insight(boid, other.position, avoidObstacles)) {
-			float distance = glm::distance(boid.position, other.position);
-			if (distance < avoidBoids) {
-				glm::vec3 direction = boid.position - other.position;
-				avoid += glm::normalize(direction) / (distance);  // Normalizuj wektor, aby uwzględnić odległość
+			if (distance > 0.0f && distance < avoidObstacles) {
+				avoid += glm::normalize(direction) / (distance + 0.1f); // Mniejszy wpływ dalekich obiektów
 				count++;
 			}
 		}
 	}
 
-
 	if (count > 0) {
-		avoid /= count;  // Przeciętna siła unikania
+		avoid /= count;
+		avoid *= 0.8f; // Zmniejszenie wpływu unikania, żeby boidy nie "drżały"
 	}
 
-	// Jeśli siła unikania jest za mała, zwróć zero, aby uniknąć błędów
 	if (glm::length(avoid) > 0.0f) {
 		return glm::normalize(avoid);  // Znormalizuj, aby siła była stała
 	}
 
-	return glm::vec3(0.0f);
+	return avoid;
 }
 
 glm::vec3 separationBuildings(Boid& boid, const std::vector<Building>& buildings) {
-	glm::vec3 avoid(0.0f);  // Siła unikania
+	glm::vec3 avoid(0.0f);
 	int count = 0;
 
 	for (const auto& building : buildings) {
-		if (checkCollision(boid.minbox, boid.maxbox, building.minbox, building.maxbox)) {
-			//std::cout << "Boid Position: ("
-				//<< boid.position.x << ", "
-				//<< boid.position.y << ", "
-				//<< boid.position.z << ")" << std::endl;
-
-			// Jeśli kolizja zachodzi, dodaj wektor unikania
-			glm::vec3 closestPoint = glm::clamp(boid.position, building.minbox, building.maxbox);
+		if (checkKDOPCollision(boid.DOP, building.DOP)) {
+			glm::vec3 closestPoint = glm::clamp(boid.position,
+				building.position - building.size / 2.0f,
+				building.position + building.size / 2.0f);
 			glm::vec3 direction = boid.position - closestPoint;
 			float distance = glm::length(direction);
 
-			// Upewnij się, że wektor ma długość > 0
 			if (distance > 0.0f) {
-				avoid += glm::normalize(direction) / distance;
+				avoid += glm::normalize(direction) / (distance + 0.2f);
 				count++;
 			}
 		}
 	}
 
-	if (count > 0) {
-		avoid /= count;  // Średnia siła unikania
-	}
-
-	// Normalizacja siły unikania, jeśli istnieje
-	if (glm::length(avoid) > 0.0f) {
-		return glm::normalize(avoid);
-	}
-
-	return glm::vec3(0.0f);  // Brak siły unikania
+	return (count > 0) ? glm::normalize(avoid) * 0.4f : glm::vec3(0.0f);
 }
 
 glm::vec3 alignment(Boid& boid, const std::vector<Boid>& boids, float neighborRadius) {
@@ -785,36 +848,66 @@ glm::vec3 limitSpeed(const glm::vec3& vector, float maxLength) {
 	return vector;
 }
 
-void updateboxBoid(Boid& boid, glm::vec3 boxsize) {
-	boid.minbox = boid.position - boxsize;
-	boid.maxbox = boid.position + boxsize;
+std::unordered_map<int, std::vector<Boid*>> spatialGrid;
+float gridSize = 1.0f; // Rozmiar komórki siatki
+
+int getGridKey(glm::vec3 position) {
+	return (int)(position.x / gridSize) * 73856093
+		^ (int)(position.y / gridSize) * 19349663
+		^ (int)(position.z / gridSize) * 83492791;
 }
 
-
 void updateBoids(float deltaTime, float neighborRadius, float avoidBoids) {
+	spatialGrid.clear(); // Reset siatki przestrzennej
 
 	for (auto& boid : boids) {
-		glm::vec3 forceCohesion = cohesion(boid, boids, neighborRadius);
-		glm::vec3 forceSeparation = separation(boid, boids, avoidBoids);
-		glm::vec3 forceSeparationObstacles = separationObstacles(boid, obstacles, avoidObstacles);
-		glm::vec3 forceSeparationBuildings = separationBuildings(boid, buildings);
-		glm::vec3 forceAlignment = alignment(boid, boids, neighborRadius);
-		glm::vec3 forceattraction = attraction(boid);
+		int gridKey = getGridKey(boid.position);
+		spatialGrid[gridKey].push_back(&boid);
+	}
 
-		boid.acceleration = forceAlignment + forceCohesion + forceSeparation + forceSeparationObstacles * 5 + forceSeparationBuildings * 10 + forceattraction;
-		boid.velocity += boid.acceleration * deltaTime;
+	for (auto& boid : boids) {
+		glm::vec3 forceCohesion(0.0f), forceSeparation(0.0f), forceAlignment(0.0f);
+		int count = 0;
+
+		// Sprawdź aktualną komórkę + sąsiadujące
+		for (int dx = -1; dx <= 1; dx++) {
+			for (int dy = -1; dy <= 1; dy++) {
+				for (int dz = -1; dz <= 1; dz++) {
+					int neighborKey = getGridKey(boid.position + glm::vec3(dx * gridSize, dy * gridSize, dz * gridSize));
+					if (spatialGrid.find(neighborKey) != spatialGrid.end()) {
+						for (auto& other : spatialGrid[neighborKey]) {
+							if (other == &boid) continue;
+							forceCohesion += cohesion(boid, boids, neighborRadius);
+							forceSeparation += separation(boid, boids, avoidBoids);
+							forceAlignment += alignment(boid, boids, neighborRadius);
+							count++;
+						}
+					}
+				}
+			}
+		}
+
+		if (count > 0) {
+			forceCohesion /= count;
+			forceSeparation /= count;
+			forceAlignment /= count;
+		}
+
+		glm::vec3 forceSeparationObstacles = separationObstacles(boid, obstacles, avoidObstacles);
+		glm::vec3 forceSeparationBuildings = separationBuildings(boid, buildings) * 0.5f;
+		glm::vec3 forceAttraction = attraction(boid);
+
+		boid.acceleration = forceAlignment + forceCohesion + forceSeparation
+			+ forceSeparationObstacles * 2 + forceSeparationBuildings * 5
+			+ forceAttraction;
+		boid.velocity += boid.acceleration * deltaTime * 0.8f;
 		boid.velocity = limitSpeed(boid.velocity, maxSpeed);
 		boid.position += boid.velocity * deltaTime;
 
-		
 		checkPosition(boid, minBoundary, maxBoundary);
-
-		updateboxBoid(boid, boxsize);
-		checkCollisionBoid(boid);
+		updateKDOPBoid(boid);
 	}
 }
-
-
 
 void drawObjectTexture(Core::RenderContext& context, glm::mat4 modelMatrix, GLuint texture) {
 
@@ -1083,12 +1176,6 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 	HEIGHT = height;
 }
 
-struct Vertex {
-	glm::vec3 position;
-	glm::vec3 normal;
-	glm::vec2 texCoords;
-};
-
 void loadModelToContext(std::string path, Core::RenderContext& context)
 {
 	Assimp::Importer import;
@@ -1117,7 +1204,6 @@ void init(GLFWwindow* window)
 	loadModelToContext("./models/dove.obj", coneContext);
 	loadModelToContext("./models/sphere.obj", sphereContext);
 	loadModelToContext("./models/cuboid.obj", buildingContext);
-	loadModelToContext("./models/spaceship.obj", shipContext);
 	initializeBoids(amountOfBoids, glm::vec3(0.0, 1.0, 0.3));
 	initializeBoids(amountOfBoids, glm::vec3(0.0, 0.0, 1.0));
 
@@ -1151,8 +1237,6 @@ void shutdown(GLFWwindow* window)
 {
 	shaderLoader.DeleteProgram(program);
 }
-
-
 
 void renderLoop(GLFWwindow* window) {
 	InitImGui(window);
