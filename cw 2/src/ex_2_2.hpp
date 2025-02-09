@@ -24,6 +24,8 @@
 
 
 GLuint program;
+GLuint programTexShadow;
+GLuint programNormalShadow;
 GLuint programTex;
 GLuint programNormal;
 Core::Shader_Loader shaderLoader;
@@ -689,26 +691,55 @@ void drawObjectTexture(Core::RenderContext& context, glm::mat4 modelMatrix, GLui
 	glUniform3f(glGetUniformLocation(programTex, "lightDir"), lightDir.x, lightDir.y, lightDir.z);
 	Core::SetActiveTexture(texture, "colorTexture", programTex, 0);
 
-	glUniformMatrix4fv(glGetUniformLocation(programTex, "LightVP"), 1, GL_FALSE, (float*)&lightVP);
-	Core::SetActiveTexture(depthMap, "depthMap", programTex, 1);
+	Core::DrawContext(context);
+}
+
+void drawObjectTextureShadow(Core::RenderContext& context, glm::mat4 modelMatrix, GLuint texture) {
+
+	glUseProgram(programTexShadow);
+	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
+	glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
+	glUniformMatrix4fv(glGetUniformLocation(programTexShadow, "transformation"), 1, GL_FALSE, (float*)&transformation);
+	glUniformMatrix4fv(glGetUniformLocation(programTexShadow, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
+	glUniform3f(glGetUniformLocation(programTexShadow, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
+	glUniform3f(glGetUniformLocation(programTexShadow, "lightDir"), lightDir.x, lightDir.y, lightDir.z);
+	Core::SetActiveTexture(texture, "colorTexture", programTexShadow, 0);
+
+	glUniformMatrix4fv(glGetUniformLocation(programTexShadow, "LightVP"), 1, GL_FALSE, (float*)&lightVP);
+	Core::SetActiveTexture(depthMap, "depthMap", programTexShadow, 1);
 
 	Core::DrawContext(context);
 }
 
-void drawObjectNormal(Core::RenderContext& context, glm::mat4 modelMatrix, GLuint textureID, GLuint normalmapId, GLuint Program) {
-	glUseProgram(Program);
+void drawObjectNormal(Core::RenderContext& context, glm::mat4 modelMatrix, GLuint textureID, GLuint normalmapId) {
+	glUseProgram(programNormal);
 	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
 	glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
-	glUniformMatrix4fv(glGetUniformLocation(Program, "transformation"), 1, GL_FALSE, (float*)&transformation);
-	glUniformMatrix4fv(glGetUniformLocation(Program, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
-	glUniform3f(glGetUniformLocation(Program, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
-	glUniform3f(glGetUniformLocation(Program, "lightDir"), lightDir.x, lightDir.y, lightDir.z);
+	glUniformMatrix4fv(glGetUniformLocation(programNormal, "transformation"), 1, GL_FALSE, (float*)&transformation);
+	glUniformMatrix4fv(glGetUniformLocation(programNormal, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
+	glUniform3f(glGetUniformLocation(programNormal, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
+	glUniform3f(glGetUniformLocation(programNormal, "lightDir"), lightDir.x, lightDir.y, lightDir.z);
 
-	Core::SetActiveTexture(textureID, "colorTexture", Program, 0);
-	Core::SetActiveTexture(normalmapId, "normalSampler", Program, 1);
+	Core::SetActiveTexture(textureID, "colorTexture", programNormal, 0);
+	Core::SetActiveTexture(normalmapId, "normalSampler", programNormal, 1);
 
-	glUniformMatrix4fv(glGetUniformLocation(Program, "LightVP"), 1, GL_FALSE, (float*)&lightVP);
-	Core::SetActiveTexture(depthMap, "depthMap", Program, 2);
+	Core::DrawContext(context);
+}
+
+void drawObjectNormalShadow(Core::RenderContext& context, glm::mat4 modelMatrix, GLuint textureID, GLuint normalmapId) {
+	glUseProgram(programNormalShadow);
+	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
+	glm::mat4 transformation = viewProjectionMatrix * modelMatrix;
+	glUniformMatrix4fv(glGetUniformLocation(programNormalShadow, "transformation"), 1, GL_FALSE, (float*)&transformation);
+	glUniformMatrix4fv(glGetUniformLocation(programNormalShadow, "modelMatrix"), 1, GL_FALSE, (float*)&modelMatrix);
+	glUniform3f(glGetUniformLocation(programNormalShadow, "lightPos"), lightPos.x, lightPos.y, lightPos.z);
+	glUniform3f(glGetUniformLocation(programNormalShadow, "lightDir"), lightDir.x, lightDir.y, lightDir.z);
+
+	Core::SetActiveTexture(textureID, "colorTexture", programNormalShadow, 0);
+	Core::SetActiveTexture(normalmapId, "normalSampler", programNormalShadow, 1);
+
+	glUniformMatrix4fv(glGetUniformLocation(programNormalShadow, "LightVP"), 1, GL_FALSE, (float*)&lightVP);
+	Core::SetActiveTexture(depthMap, "depthMap", programNormalShadow, 2);
 
 	Core::DrawContext(context);
 }
@@ -743,7 +774,12 @@ void drawBoids(bool shadow, glm::mat4 lightViewProjectionMatrix) {
 			drawObjectDepth(coneContext, lightViewProjectionMatrix, modelMatrix);
 		}
 		else {
-			drawObjectTexture(coneContext, modelMatrix, texture::dove);
+			if (shadowMappingEnabled) {
+				drawObjectTextureShadow(coneContext, modelMatrix, texture::dove);
+			}
+			else {
+				drawObjectTexture(coneContext, modelMatrix, texture::dove);
+			}
 		}
 	}
 }
@@ -761,10 +797,20 @@ void drawObstacles(bool shadow, glm::mat4 lightViewProjectionMatrix) {
 		}
 		else {
 			if (normalMappingEnabled) {
-				drawObjectNormal(sphereContext, modelMatrix, texture::earth, texture::earthNormal, programNormal);
+				if (shadowMappingEnabled) {
+					drawObjectNormalShadow(sphereContext, modelMatrix, texture::earth, texture::earthNormal);
+				}
+				else {
+					drawObjectNormal(sphereContext, modelMatrix, texture::earth, texture::earthNormal);
+				}
 			}
 			else {
-				drawObjectTexture(sphereContext, modelMatrix, texture::earth);
+				if (shadowMappingEnabled) {
+					drawObjectTextureShadow(sphereContext, modelMatrix, texture::earth);
+				}
+				else {
+					drawObjectTexture(sphereContext, modelMatrix, texture::earth);
+				}
 			}
 		}
 	}
@@ -783,10 +829,20 @@ void drawBuildings(bool shadow, glm::mat4 lightViewProjectionMatrix) {
 		}
 		else {
 			if (normalMappingEnabled) {
-				drawObjectNormal(buildingContext, modelMatrix, texture::steel, texture::steelNormal, programNormal);
+				if (shadowMappingEnabled) {
+					drawObjectNormalShadow(buildingContext, modelMatrix, texture::steel, texture::steelNormal);
+				}
+				else {
+					drawObjectNormal(buildingContext, modelMatrix, texture::steel, texture::steelNormal);
+				}
 			}
 			else {
-				drawObjectTexture(buildingContext, modelMatrix, texture::steel);
+				if (shadowMappingEnabled) {
+					drawObjectTextureShadow(buildingContext, modelMatrix, texture::steel);
+				}
+				else {
+					drawObjectTexture(buildingContext, modelMatrix, texture::steel);
+				}
 			}
 		}
 	}
@@ -857,9 +913,16 @@ void renderScene(GLFWwindow* window)
 	double time = currentTime - lastTime;
 	updateBoids(time, neighborRadius, avoidBoids);
 	lastTime = currentTime;
-	drawBoids(false, glm::mat4(0.f));
-	makescene(false, glm::mat4(0.f));
-	drawObstacles(false, glm::mat4(0.f));
+	if (shadowMappingEnabled) {
+		drawBoids(false, glm::mat4(0.f));
+		makescene(false, glm::mat4(0.f));
+		drawObstacles(false, glm::mat4(0.f));
+	}
+	else {
+		drawBoids(false, glm::mat4(0.f));
+		makescene(false, glm::mat4(0.f));
+		drawObstacles(false, glm::mat4(0.f));
+	}
 
 	glm::mat4 cameraMatrix = createCameraMatrix();
 
@@ -914,6 +977,8 @@ void init(GLFWwindow* window)
 	programTex = shaderLoader.CreateProgram("shaders/shader_tex.vert", "shaders/shader_tex.frag");
 	shadowShaderProgram = shaderLoader.CreateProgram("shaders/shader_shadow.vert", "shaders/shader_shadow.frag");
 	programNormal = shaderLoader.CreateProgram("shaders/shader_normal.vert", "shaders/shader_normal.frag");
+	programNormalShadow = shaderLoader.CreateProgram("shaders/shader_normal_shadow.vert", "shaders/shader_normal_shadow.frag");
+	programTexShadow = shaderLoader.CreateProgram("shaders/shader_tex_shadow.vert", "shaders/shader_tex_shadow.frag");
 	loadModelToContext("./models/dove.obj", coneContext);
 	loadModelToContext("./models/sphere.obj", sphereContext);
 	loadModelToContext("./models/cuboid.obj", buildingContext);
