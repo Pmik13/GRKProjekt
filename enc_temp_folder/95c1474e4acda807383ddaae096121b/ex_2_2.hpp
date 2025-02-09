@@ -354,11 +354,6 @@ void renderTerrain(const std::vector<float>& vertices, const std::vector<unsigne
 
 	// Use your shader program
 	// glUseProgram(shaderProgram);
-	glUseProgram(programTerrain);
-
-	// Set the transformation matrix for the terrain
-	glm::mat4 viewProjectionMatrix = createPerspectiveMatrix() * createCameraMatrix();
-	glUniformMatrix4fv(glGetUniformLocation(programTerrain, "model"), 1, GL_FALSE, glm::value_ptr(viewProjectionMatrix));
 
 	// Bind the VAO and draw the terrain
 	glBindVertexArray(VAO);
