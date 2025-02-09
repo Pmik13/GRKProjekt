@@ -219,9 +219,9 @@ std::vector<unsigned int> indices;
 //float frequencyValue = 0.1f;
  float frequencyValue = 0.5f; // -1.9
 
-float Boundryfloat = 2.0f;
-glm::vec3 minBoundary = glm::vec3(-10.0f, 3.0f, -10.0f);
-glm::vec3 maxBoundary = glm::vec3(10.0f, 7.0f, 10.0f);
+float Boundryfloat = 5.0f;
+glm::vec3 minBoundary = glm::vec3(-10.0f - Boundryfloat, 8.0f - Boundryfloat, -10.0f - Boundryfloat);
+glm::vec3 maxBoundary = glm::vec3(10.0f - Boundryfloat, 12.0f - Boundryfloat, 10.0f - Boundryfloat);
 
 void addBuilding(glm::vec3 buildPos, glm::vec3 buildSize = glm::vec3(0.5f, 1.0f, 1.0f)) {
 	Building building;
@@ -297,9 +297,15 @@ void RenderUI() {
 	 // Static to keep it persistent across frames
 	ImGui::SliderFloat("Boids:radius avoidBoid", &avoidBoids, 0.0f, 4.0f);
 	ImGui::SliderFloat("Boids:radius avoidObstacle ", &avoidObstacles, 0.0f, 4.0f);
-	ImGui::SliderFloat("Boids: Boundry ", &Boundryfloat, 0.0f, 10.0f);
+	bool sliderChangedBoundary = ImGui::SliderFloat("Boids: Boundary", &Boundryfloat, 0.0f, 10.0f);
 	bool sliderChangedAmountBoids = ImGui::SliderFloat("Boids: number", &amountOfBoids, 0, 100);
 	//bool sliderFrequencyChanged = = ImGui::SliderFloat("Terrain: Frequency", &amountOfBoids, 0, 100);
+
+	if (sliderChangedBoundary) {
+		minBoundary = glm::vec3(-10.0f, 8.0f - Boundryfloat, -10.0f);
+		maxBoundary = glm::vec3(10.0f, 12.0f - Boundryfloat, 10.0f);
+	}
+
 
 	// Check if the slider value has changed
 	if (sliderChangedAmountBoids) {
