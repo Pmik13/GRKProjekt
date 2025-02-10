@@ -802,7 +802,7 @@ glm::vec3 separationBuildings(Boid& boid, const std::vector<Building>& buildings
 
 	// Normalizacja siły unikania, jeśli istnieje
 	if (glm::length(avoid) > 0.0f) {
-		return glm::normalize(avoid) * 0.2;
+		return glm::normalize(avoid) * 0.5;
 	}
 
 	return glm::vec3(0.0f);  // Brak siły unikania
