@@ -172,7 +172,7 @@ namespace texture {
 	GLuint bird;
 }
 
-float amountOfBoids = 7.f;
+float amountOfBoids = 15.f;
 float neighborRadius = 1.0f;
 float sightAngle = 120.0f;
 float avoidBoids = 0.4f;
@@ -180,8 +180,8 @@ float avoidObstacles = 1.0f;
 double lastTime = 0.0;
 int attract = 0;
 
-std::vector<glm::vec3> compute12DOP(const std::vector<glm::vec3>& vertices, const std::vector<unsigned int>& indices) {
-	std::vector<glm::vec3> DOP(12);  // Wyniki
+std::vector<glm::vec3> compute12DOP(const std::vector<glm::vec3>& vertices, const std::vector<unsigned int>& indices, glm::vec3 position, glm::vec3 scale) {
+	std::vector<glm::vec3> DOP(12);
 	std::vector<glm::vec3> directions = {
 		glm::vec3(1, 0, 0), glm::vec3(-1, 0, 0),
 		glm::vec3(0, 1, 0), glm::vec3(0, -1, 0),
@@ -191,29 +191,34 @@ std::vector<glm::vec3> compute12DOP(const std::vector<glm::vec3>& vertices, cons
 		glm::normalize(glm::vec3(1, 0, 1)), glm::normalize(glm::vec3(-1, 0, 1))
 	};
 
-	// Iteruj przez wszystkie kierunki
-	for (int i = 0; i < 12; i++) {
-		float minProj = glm::dot(vertices[indices[0]], directions[i]);  // Projektuj pierwszy wierzchołek
-		float maxProj = minProj;  // Inicjalizuj max i min dla kierunku
+	// Zastosowanie skali i przesunięcia do wszystkich wierzchołków
+	std::vector<glm::vec3> scaledVertices(vertices.size());
+	for (size_t i = 0; i < vertices.size(); i++) {
+		scaledVertices[i] = (vertices[i] * scale) + position;  // Skaluje i dodaje przesunięcie
+	}
 
-		// Iteruj przez wszystkie indeksy wierzchołków
+	// Obliczanie min/max projekcji
+	for (int i = 0; i < 12; i++) {
+		// Zainicjowanie min/max projekcji z pierwszego wierzchołka
+		float minProj = glm::dot(scaledVertices[indices[0]], directions[i]);
+		float maxProj = minProj;
+
+		// Obliczanie min/max projekcji dla pozostałych wierzchołków
 		for (size_t j = 0; j < indices.size(); j++) {
 			unsigned int idx = indices[j];
-			glm::vec3 vertex = vertices[idx];  // Pobierz wierzchołek za pomocą indeksu
+			glm::vec3 vertex = scaledVertices[idx];  // Wierzchołek już z przesunięciem i skalą
 			float proj = glm::dot(vertex, directions[i]);
 
-			// Zaktualizuj max i min
 			if (proj > maxProj) maxProj = proj;
 			if (proj < minProj) minProj = proj;
 		}
 
-		// Przypisz wynik dla danego kierunku
+		// Obliczanie DOP
 		DOP[i] = directions[i] * (maxProj - minProj);
 	}
 
 	return DOP;
 }
-
 
 struct Boid {
 	glm::vec3 position;   // Pozycja boida
@@ -225,7 +230,7 @@ struct Boid {
 	std::vector<glm::vec3> DOP;
 
 	void setKDOP() {
-		DOP = compute12DOP(vertices, indices);
+		DOP = compute12DOP(vertices, indices, position, glm::vec3(1.0f));
 	}
 };
 
@@ -237,7 +242,7 @@ struct Obstacle {
 	std::vector<unsigned int> indices;
 
 	void setKDOP() {
-		DOP = compute12DOP(vertices, indices);
+		DOP = compute12DOP(vertices, indices, position, glm::vec3(size, size, size));
 	}
 };
 
@@ -249,7 +254,7 @@ struct Building {
 	std::vector<unsigned int> indices;
 
 	void setKDOP() {
-		DOP = compute12DOP(vertices, indices);
+		DOP = compute12DOP(vertices, indices, position, glm::vec3(size.x, size.y, size.z));
 	}
 };
 
@@ -266,7 +271,7 @@ std::vector<unsigned int> indices;
 //float frequencyValue = 0.1f;
  float frequencyValue = 0.5f; // -1.9
 
-float Boundryfloat = 5.0f;
+float Boundryfloat = 8.0f;
 glm::vec3 minBoundary = glm::vec3(-10.0f - Boundryfloat, 8.0f - Boundryfloat, -10.0f - Boundryfloat);
 glm::vec3 maxBoundary = glm::vec3(10.0f - Boundryfloat, 12.0f - Boundryfloat, 10.0f - Boundryfloat);
 
@@ -740,28 +745,30 @@ glm::vec3 separationObstacles(Boid& boid, const std::vector<Obstacle>& obstacles
 	glm::vec3 avoid(0.0f);  // Siła unikania
 	int count = 0;
 
-	for (const auto& obstacle : obstacles) {
-		if (checkKDOPCollision(boid.DOP, obstacle.DOP)) { // Sprawdzenie KDOP zamiast pozycji
-			glm::vec3 direction = boid.position - obstacle.position;
-			float distance = glm::length(direction);
 
-			if (distance > 0.0f && distance < avoidObstacles) {
-				avoid += glm::normalize(direction) / (distance + 0.1f); // Mniejszy wpływ dalekich obiektów
+	for (const auto& other : obstacles) {
+		// Upewnijmy się, że boidy są w zasięgu widzenia i w obrębie unikania
+		if (insight(boid, other.position, avoidObstacles)) {
+			float distance = glm::distance(boid.position, other.position);
+			if (distance < avoidBoids) {
+				glm::vec3 direction = boid.position - other.position;
+				avoid += glm::normalize(direction) / (distance);  // Normalizuj wektor, aby uwzględnić odległość
 				count++;
 			}
 		}
 	}
 
+
 	if (count > 0) {
-		avoid /= count;
-		avoid *= 0.8f; // Zmniejszenie wpływu unikania, żeby boidy nie "drżały"
+		avoid /= count;  // Przeciętna siła unikania
 	}
 
+	// Jeśli siła unikania jest za mała, zwróć zero, aby uniknąć błędów
 	if (glm::length(avoid) > 0.0f) {
 		return glm::normalize(avoid);  // Znormalizuj, aby siła była stała
 	}
 
-	return avoid;
+	return glm::vec3(0.0f);
 }
 
 glm::vec3 separationBuildings(Boid& boid, const std::vector<Building>& buildings) {
@@ -777,13 +784,22 @@ glm::vec3 separationBuildings(Boid& boid, const std::vector<Building>& buildings
 			float distance = glm::length(direction);
 
 			if (distance > 0.0f) {
-				avoid += glm::normalize(direction) / (distance + 0.2f);
+				avoid += glm::normalize(direction) / distance;
 				count++;
 			}
 		}
 	}
 
-	return (count > 0) ? glm::normalize(avoid) * 0.4f : glm::vec3(0.0f);
+	if (count > 0) {
+		avoid /= count;  // Średnia siła unikania
+	}
+
+	// Normalizacja siły unikania, jeśli istnieje
+	if (glm::length(avoid) > 0.0f) {
+		return glm::normalize(avoid);
+	}
+
+	return glm::vec3(0.0f);  // Brak siły unikania
 }
 
 glm::vec3 alignment(Boid& boid, const std::vector<Boid>& boids, float neighborRadius) {
@@ -831,63 +847,24 @@ glm::vec3 limitSpeed(const glm::vec3& vector, float maxLength) {
 	return vector;
 }
 
-std::unordered_map<int, std::vector<Boid*>> spatialGrid;
-float gridSize = 1.0f; // Rozmiar komórki siatki
-
-int getGridKey(glm::vec3 position) {
-	return (int)(position.x / gridSize) * 73856093
-		^ (int)(position.y / gridSize) * 19349663
-		^ (int)(position.z / gridSize) * 83492791;
-}
-
 void updateBoids(float deltaTime, float neighborRadius, float avoidBoids) {
-	spatialGrid.clear(); // Reset siatki przestrzennej
 
 	for (auto& boid : boids) {
-		int gridKey = getGridKey(boid.position);
-		spatialGrid[gridKey].push_back(&boid);
-	}
-
-	for (auto& boid : boids) {
-		glm::vec3 forceCohesion(0.0f), forceSeparation(0.0f), forceAlignment(0.0f);
-		int count = 0;
-
-		// Sprawdź aktualną komórkę + sąsiadujące
-		for (int dx = -1; dx <= 1; dx++) {
-			for (int dy = -1; dy <= 1; dy++) {
-				for (int dz = -1; dz <= 1; dz++) {
-					int neighborKey = getGridKey(boid.position + glm::vec3(dx * gridSize, dy * gridSize, dz * gridSize));
-					if (spatialGrid.find(neighborKey) != spatialGrid.end()) {
-						for (auto& other : spatialGrid[neighborKey]) {
-							if (other == &boid) continue;
-							forceCohesion += cohesion(boid, boids, neighborRadius);
-							forceSeparation += separation(boid, boids, avoidBoids);
-							forceAlignment += alignment(boid, boids, neighborRadius);
-							count++;
-						}
-					}
-				}
-			}
-		}
-
-		if (count > 0) {
-			forceCohesion /= count;
-			forceSeparation /= count;
-			forceAlignment /= count;
-		}
-
+		glm::vec3 forceCohesion = cohesion(boid, boids, neighborRadius);
+		glm::vec3 forceSeparation = separation(boid, boids, avoidBoids);
 		glm::vec3 forceSeparationObstacles = separationObstacles(boid, obstacles, avoidObstacles);
-		glm::vec3 forceSeparationBuildings = separationBuildings(boid, buildings) * 0.5f;
-		glm::vec3 forceAttraction = attraction(boid);
+		glm::vec3 forceSeparationBuildings = separationBuildings(boid, buildings);
+		glm::vec3 forceAlignment = alignment(boid, boids, neighborRadius);
+		glm::vec3 forceattraction = attraction(boid);
 
-		boid.acceleration = forceAlignment + forceCohesion + forceSeparation
-			+ forceSeparationObstacles * 2 + forceSeparationBuildings * 5
-			+ forceAttraction;
-		boid.velocity += boid.acceleration * deltaTime * 0.8f;
+		boid.acceleration = forceAlignment + forceCohesion + forceSeparation + forceSeparationObstacles * 5 + forceSeparationBuildings * 10 + forceattraction;
+		boid.velocity += boid.acceleration * deltaTime;
 		boid.velocity = limitSpeed(boid.velocity, maxSpeed);
 		boid.position += boid.velocity * deltaTime;
 
+
 		checkPosition(boid, minBoundary, maxBoundary);
+
 		updateKDOPBoid(boid);
 	}
 }
