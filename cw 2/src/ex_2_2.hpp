@@ -622,12 +622,11 @@ bool checkKDOPCollision(const std::vector<glm::vec3>& DOP1, const std::vector<gl
 	return true;
 }
 
-void updateKDOPBoid(Boid& boid) {
-	glm::vec3 delta = boid.velocity;
+void updateKDOPBoid(Boid& boid, glm::vec3 oldPosition) {
+	glm::vec3 translation = boid.position - oldPosition;  // Wektor przesunięcia
 
 	for (int i = 0; i < 12; i++) {
-		float deltaProj = glm::dot(delta, glm::normalize(boid.DOP[i]));
-		boid.DOP[i] += glm::normalize(boid.DOP[i]) * deltaProj;
+		boid.DOP[i] += translation;  // Przesunięcie całego K-DOP
 	}
 }
 
@@ -865,7 +864,7 @@ void updateBoids(float deltaTime, float neighborRadius, float avoidBoids) {
 
 		checkPosition(boid, minBoundary, maxBoundary);
 
-		updateKDOPBoid(boid);
+		updateKDOPBoid(boid,boid.position - boid.velocity * deltaTime);
 	}
 }
 
