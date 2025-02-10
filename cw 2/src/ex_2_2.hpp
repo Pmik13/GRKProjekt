@@ -276,14 +276,14 @@ glm::vec3 minBoundary = glm::vec3(-10.0f - Boundryfloat, 8.0f - Boundryfloat, -1
 glm::vec3 maxBoundary = glm::vec3(10.0f - Boundryfloat, 12.0f - Boundryfloat, 10.0f - Boundryfloat);
 
 void addBuilding(glm::vec3 buildPos, glm::vec3 buildSize) {
-	Building building;
-	building.position = buildPos;
-	building.size = buildSize;
-	building.vertices = buildingContext.getVertices();
-	building.indices = buildingContext.getIndices();
-	building.setKDOP();
+    Building building;
+    building.position = buildPos;
+    building.size = buildSize;
+    building.vertices = buildingContext.getVertices();
+    building.indices = buildingContext.getIndices();
+    building.setKDOP();
 
-	buildings.push_back(building);
+    buildings.push_back(building);
 }
 
 void initializeBoids(float numBoids, glm::vec3 color) {
@@ -355,7 +355,7 @@ void RenderUI() {
 	ImGui::SliderFloat("Boids:radius avoidBoid", &avoidBoids, 0.0f, 4.0f);
 	ImGui::SliderFloat("Boids:radius avoidObstacle ", &avoidObstacles, 0.0f, 4.0f);
 	bool sliderChangedBoundary = ImGui::SliderFloat("Boids: Boundary", &Boundryfloat, 0.0f, 10.0f);
-	bool sliderChangedAmountBoids = ImGui::SliderFloat("Boids: number", &amountOfBoids, 0, 15);
+	bool sliderChangedAmountBoids = ImGui::SliderFloat("Boids: number", &amountOfBoids, 0, 100);
 	//bool sliderFrequencyChanged = = ImGui::SliderFloat("Terrain: Frequency", &amountOfBoids, 0, 100);
 
 	if (sliderChangedBoundary) {
@@ -590,36 +590,43 @@ void renderTerrain() {
 }
 
 bool checkKDOPCollision(const std::vector<glm::vec3>& DOP1, const std::vector<glm::vec3>& DOP2) {
-	// Iterujemy przez 12 osi (w przypadku 12DOP)
+	// 12 kierunków dla 12DOP
+	std::vector<glm::vec3> directions = {
+		glm::vec3(1, 0, 0), glm::vec3(-1, 0, 0),
+		glm::vec3(0, 1, 0), glm::vec3(0, -1, 0),
+		glm::vec3(0, 0, 1), glm::vec3(0, 0, -1),
+		glm::normalize(glm::vec3(1, 1, 0)), glm::normalize(glm::vec3(-1, 1, 0)),
+		glm::normalize(glm::vec3(1, -1, 0)), glm::normalize(glm::vec3(-1, -1, 0)),
+		glm::normalize(glm::vec3(1, 0, 1)), glm::normalize(glm::vec3(-1, 0, 1))
+	};
+
 	for (int i = 0; i < 12; i++) {
-		// Rzutowanie DOP1
-		float minProj1 = glm::dot(DOP1[0], DOP1[i]);
-		float maxProj1 = minProj1;
+		float minProj1 = std::numeric_limits<float>::max();
+		float maxProj1 = std::numeric_limits<float>::lowest();
+		float minProj2 = std::numeric_limits<float>::max();
+		float maxProj2 = std::numeric_limits<float>::lowest();
 
-		// Zamiast iterować przez wszystkie wierzchołki DOP1, tylko wektory, które tworzą 12DOP
-		for (int j = 1; j < DOP1.size(); j++) {
-			float proj = glm::dot(DOP1[j], DOP1[i]);
-			if (proj > maxProj1) maxProj1 = proj;
-			if (proj < minProj1) minProj1 = proj;
+		// Projekcja DOP1 na daną oś
+		for (const auto& v : DOP1) {
+			float proj = glm::dot(v, directions[i]);
+			minProj1 = std::min(minProj1, proj);
+			maxProj1 = std::max(maxProj1, proj);
 		}
 
-		// Rzutowanie DOP2
-		float minProj2 = glm::dot(DOP2[0], DOP2[i]);
-		float maxProj2 = minProj2;
-
-		// Zamiast iterować przez wszystkie wierzchołki DOP2, tylko wektory, które tworzą 12DOP
-		for (int j = 1; j < DOP2.size(); j++) {
-			float proj = glm::dot(DOP2[j], DOP2[i]);
-			if (proj > maxProj2) maxProj2 = proj;
-			if (proj < minProj2) minProj2 = proj;
+		// Projekcja DOP2 na tę samą oś
+		for (const auto& v : DOP2) {
+			float proj = glm::dot(v, directions[i]);
+			minProj2 = std::min(minProj2, proj);
+			maxProj2 = std::max(maxProj2, proj);
 		}
 
-		// Jeśli przedziały rzutów się nie zachodzą, to nie ma kolizji
+		// Jeśli przedziały się nie przecinają, brak kolizji
 		if (maxProj1 < minProj2 || maxProj2 < minProj1) {
 			return false;
 		}
 	}
-	return true;
+
+	return true;  // Jeśli wszystkie osie mają nakładające się projekcje, obiekty kolidują
 }
 
 void updateKDOPBoid(Boid& boid) {
@@ -796,7 +803,7 @@ glm::vec3 separationBuildings(Boid& boid, const std::vector<Building>& buildings
 
 	// Normalizacja siły unikania, jeśli istnieje
 	if (glm::length(avoid) > 0.0f) {
-		return glm::normalize(avoid);
+		return glm::normalize(avoid) * 0.2;
 	}
 
 	return glm::vec3(0.0f);  // Brak siły unikania
